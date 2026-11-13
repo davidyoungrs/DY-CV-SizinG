@@ -53,6 +53,8 @@ import {
 import {
   CAGE_MATERIALS,
   CageMaterialId,
+  HOLE_SPACING_RULES,
+  HoleSpacingRuleId,
   synthesizeDrilledCageAndStress,
   evaluateSibandaLocalHoleFactor,
   generateUnrolledCageDXF,
@@ -207,6 +209,7 @@ export default function App() {
   const [modulateHoleDiameter, setModulateHoleDiameter] = useState<boolean>(true);
   const [enforceZeroDeadbandOverlap, setEnforceZeroDeadbandOverlap] = useState<boolean>(true);
   const [targetRowOverlapPct, setTargetRowOverlapPct] = useState<number>(28);
+  const [holeSpacingRule, setHoleSpacingRule] = useState<HoleSpacingRuleId>('STD_HIGH_CAP_1_75D');
   const [showSibandaGalleryHeatmap, setShowSibandaGalleryHeatmap] = useState<boolean>(true);
   const [selectedWallThickness_mm, setSelectedWallThickness_mm] = useState<number>(10.5);
   const [erosionAllowance_mm, setErosionAllowance_mm] = useState<number>(1.0);
@@ -292,6 +295,7 @@ export default function App() {
         modulateHoleDiameter,
         enforceZeroDeadbandOverlap,
         targetRowOverlapPct,
+        holeSpacingRule,
         selectedWallThickness_mm,
         erosionAllowance_mm,
         shutoffDeltaP_bar: maxShutoffDeltaP_bar,
@@ -308,6 +312,7 @@ export default function App() {
       modulateHoleDiameter,
       enforceZeroDeadbandOverlap,
       targetRowOverlapPct,
+      holeSpacingRule,
       selectedWallThickness_mm,
       erosionAllowance_mm,
       maxShutoffDeltaP_bar,
@@ -341,7 +346,7 @@ export default function App() {
     [operatingCases, piping, correlatedValve, cageSynthesis, trimStyle, charConfig]
   );
 
-  // Automated Valve Size & Pressure Rating Recommender based on all process conditions
+  // Automated Valve Size & Pressure Rating Recommender based on all process conditions (60–90% Max Cv Rule)
   const valveRecommendation = useMemo(
     () =>
       recommendValveSizeAndRating({
@@ -352,8 +357,20 @@ export default function App() {
         flowDirection,
         reducedTrimFactor,
         useExtendedStroke,
+        characteristicType: charConfig.type,
+        equalPctRangeability: charConfig.equalPctRangeability,
       }),
-    [operatingCases, piping, trimStyle, bodyStyle, flowDirection, reducedTrimFactor, useExtendedStroke]
+    [
+      operatingCases,
+      piping,
+      trimStyle,
+      bodyStyle,
+      flowDirection,
+      reducedTrimFactor,
+      useExtendedStroke,
+      charConfig.type,
+      charConfig.equalPctRangeability,
+    ]
   );
 
   const charSimulation = useMemo(
@@ -927,315 +944,6 @@ export default function App() {
            ===================================================================== */}
         {activeTab === 'PROCESS_SIZING' && (
           <div className="space-y-6">
-            {/* AUTOMATED VALVE SIZE & PRESSURE CLASS SELECTION CARD */}
-            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-cyan-500/40 rounded-xl p-5 shadow-2xl space-y-4">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/60 pb-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                      Multi-Condition Valve Sizing & Selection Analysis
-                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono text-[10px] font-semibold">
-                        ALL CONDITIONS ACCOMMODATED IN ONE VALVE
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-400 font-mono">
-                      Calculates actual required Cv per condition, checks pressure & temperature limits, and selects optimal standard size on Linear trim
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      handleSelectSizeFromSchedule(valveRecommendation.recommendedDN);
-                      setPressureClass(valveRecommendation.recommendedPressureClass);
-                      setTrimStyle('CONTOURED_LINEAR');
-                      setCharConfig((prev) => ({ ...prev, type: 'LINEAR' }));
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-mono font-semibold text-xs transition shadow-lg shadow-cyan-900/40"
-                  >
-                    Apply Recommended Valve: DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS}) {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
-                  </button>
-                </div>
-              </div>
-
-              {/* Readout Metrics */}
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
-                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Size</span>
-                  <span className="text-base font-mono font-bold text-cyan-400">
-                    DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS})
-                  </span>
-                  <span className="block text-[10px] font-mono text-slate-500">
-                    Bore Ø{GENERIC_VALVE_SCHEDULE.find((s) => s.dn === valveRecommendation.recommendedDN)?.d_port_mm} mm
-                  </span>
-                </div>
-
-                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
-                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Rating</span>
-                  <span className="text-base font-mono font-bold text-slate-100">
-                    {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
-                  </span>
-                  <span className="block text-[10px] font-mono text-slate-500">
-                    P_max = {valveRecommendation.maxPressureBarA.toFixed(1)} bar a @ {valveRecommendation.maxTemperatureDegC}°C
-                  </span>
-                </div>
-
-                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
-                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Required Cv (Capacity)</span>
-                  <span className="text-base font-mono font-bold text-amber-400">
-                    {valveRecommendation.maxRequiredCv} Cv
-                  </span>
-                  <span className="block text-[10px] font-mono text-slate-500">
-                    Rated: {valveRecommendation.recommendedRatedCv} Cv ({valveRecommendation.maxPercentOpen}% open)
-                  </span>
-                </div>
-
-                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
-                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Min Required Cv (Turndown)</span>
-                  <span className="text-base font-mono font-bold text-slate-100">
-                    {valveRecommendation.minRequiredCv} Cv
-                  </span>
-                  <span className="block text-[10px] font-mono text-emerald-400 font-semibold">
-                    {valveRecommendation.minPercentOpen}% open ({valveRecommendation.turndownRatio}:1 turndown)
-                  </span>
-                </div>
-
-                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
-                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Operating Travel Span</span>
-                  <span className="text-base font-mono font-bold text-emerald-400">
-                    {valveRecommendation.minPercentOpen}% — {valveRecommendation.maxPercentOpen}%
-                  </span>
-                  <span className="block text-[10px] font-mono text-slate-500">
-                    Linear Trim (Ideal 15%–85%)
-                  </span>
-                </div>
-
-                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
-                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Predicted Noise</span>
-                  <span className="text-base font-mono font-bold text-cyan-400">
-                    {Math.max(...caseResults.map((c) => c.noiseDrilledCage_dBA))} dBA
-                  </span>
-                  <span className="block text-[10px] font-mono text-slate-500">
-                    Std trim: {Math.max(...caseResults.map((c) => c.noiseStandardTrim_dBA))} dBA
-                  </span>
-                </div>
-              </div>
-
-              {/* Engineering Rationale bullet list */}
-              <div className="bg-slate-950/70 rounded-lg p-3 border border-slate-800 text-xs font-mono space-y-1 text-slate-300">
-                {valveRecommendation.rationale.map((r, i) => (
-                  <div key={i} className="flex items-start gap-2">
-                    <span className="text-cyan-400 font-bold">•</span>
-                    <span>{r}</span>
-                  </div>
-                ))}
-              </div>
-            </div>
-
-            {/* Top Row: Fluid Preset Loader & Piping Envelope */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Fluid Presets & Custom Dimension Overrides */}
-              <div className="lg:col-span-5 bg-slate-800/60 rounded-xl border border-slate-700/60 p-5 shadow-xl space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
-                      <Gauge className="w-4 h-4 text-cyan-400" />
-                      Process Fluid Benchmark Presets & Hardware Overrides
-                    </h2>
-                    <p className="text-xs text-slate-400 font-mono">
-                      Load standard fluid properties or customize bore/stroke/Cv
-                    </p>
-                  </div>
-                </div>
-
-                <div>
-                  <label className="block text-xs font-mono text-slate-300 mb-1.5">
-                    Quick-Load Process Fluid Preset (Applies to All Operating Cases)
-                  </label>
-                  <select
-                    onChange={(e) => applyFluidPresetToAllCases(e.target.value)}
-                    defaultValue="BFW_185C"
-                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-cyan-300"
-                  >
-                    {FLUID_PRESETS.map((fp) => (
-                      <option key={fp.id} value={fp.id}>
-                        {fp.name} — [{fp.phase}]
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div className="grid grid-cols-3 gap-3 pt-1">
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Custom Seat Bore (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      placeholder={`${correlatedValve.d_port_mm}`}
-                      value={customBoreOverride ?? ''}
-                      onChange={(e) =>
-                        setCustomBoreOverride(
-                          e.target.value ? Number(e.target.value) : null
-                        )
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Custom Stroke H (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      placeholder={`${correlatedValve.stroke_mm}`}
-                      value={customStrokeOverride ?? ''}
-                      onChange={(e) =>
-                        setCustomStrokeOverride(
-                          e.target.value ? Number(e.target.value) : null
-                        )
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Custom Rated Cv
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      placeholder={`${correlatedValve.ratedCv}`}
-                      value={customRatedCvOverride ?? ''}
-                      onChange={(e) =>
-                        setCustomRatedCvOverride(
-                          e.target.value ? Number(e.target.value) : null
-                        )
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                </div>
-              </div>
-
-              {/* Swaged Piping & Water-Hammer Envelope */}
-              <div className="lg:col-span-7 bg-slate-800/60 rounded-xl border border-slate-700/60 p-5 shadow-xl space-y-4">
-                <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
-                  <div>
-                    <h2 className="text-sm font-bold text-slate-100">
-                      Swaged Piping Geometry (FP, FLP, xTP) & Water-Hammer Envelope
-                    </h2>
-                    <p className="text-xs text-slate-400 font-mono">
-                      Coupled concentric reducer/expander head loss & Joukowsky acoustic reflection check
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-xs font-mono text-cyan-400">
-                    Valve d = {correlatedValve.d_mm} mm vs Pipe D1/D2 = {piping.upstreamPipeID_mm}/
-                    {piping.downstreamPipeID_mm} mm
-                  </span>
-                </div>
-
-                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Upstream Pipe ID D1 (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      value={piping.upstreamPipeID_mm}
-                      onChange={(e) =>
-                        setPiping({ ...piping, upstreamPipeID_mm: Number(e.target.value) })
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Downstream Pipe D2 (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      value={piping.downstreamPipeID_mm}
-                      onChange={(e) =>
-                        setPiping({ ...piping, downstreamPipeID_mm: Number(e.target.value) })
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Pipe Wall t_p (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={piping.pipeWallThickness_mm}
-                      onChange={(e) =>
-                        setPiping({ ...piping, pipeWallThickness_mm: Number(e.target.value) })
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Line Length L (m)
-                    </label>
-                    <input
-                      type="number"
-                      step="5"
-                      value={piping.upstreamPipeLength_m}
-                      onChange={(e) =>
-                        setPiping({ ...piping, upstreamPipeLength_m: Number(e.target.value) })
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Fast-Close Time (s)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={piping.actuatorCloseTime_s}
-                      onChange={(e) =>
-                        setPiping({ ...piping, actuatorCloseTime_s: Number(e.target.value) })
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
-                      Body Alloy Group
-                    </label>
-                    <select
-                      value={piping.bodyMaterialCategory}
-                      onChange={(e) =>
-                        setPiping({
-                          ...piping,
-                          bodyMaterialCategory: e.target.value as
-                            | 'CARBON_STEEL'
-                            | 'STAINLESS_ALLOY',
-                        })
-                      }
-                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-cyan-300"
-                    >
-                      <option value="STAINLESS_ALLOY">SS / Cr-Mo (≤15 m/s)</option>
-                      <option value="CARBON_STEEL">Carbon Steel (≤10.5 m/s)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* Multi-Condition Operating Inputs Table */}
             <div className="bg-slate-800/60 rounded-xl border border-slate-700/60 p-5 shadow-xl space-y-4">
               <div className="flex items-center justify-between">
@@ -1642,6 +1350,315 @@ export default function App() {
                 </div>
               )}
             </div>
+            {/* AUTOMATED VALVE SIZE & PRESSURE CLASS SELECTION CARD */}
+            <div className="bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 border border-cyan-500/40 rounded-xl p-5 shadow-2xl space-y-4">
+              <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-700/60 pb-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-cyan-500/20 border border-cyan-500/40 flex items-center justify-center text-cyan-400">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                      Multi-Condition Valve Sizing & Selection Analysis
+                      <span className="px-2 py-0.5 rounded bg-emerald-950 text-emerald-400 border border-emerald-800 font-mono text-[10px] font-semibold">
+                        ALL CONDITIONS ACCOMMODATED IN ONE VALVE
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Calculates actual required Cv per condition, checks pressure & temperature limits, and selects optimal standard size on Linear trim
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => {
+                      handleSelectSizeFromSchedule(valveRecommendation.recommendedDN);
+                      setPressureClass(valveRecommendation.recommendedPressureClass);
+                      setTrimStyle('CONTOURED_LINEAR');
+                      setCharConfig((prev) => ({ ...prev, type: 'LINEAR' }));
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-cyan-600 hover:bg-cyan-500 text-white font-mono font-semibold text-xs transition shadow-lg shadow-cyan-900/40"
+                  >
+                    Apply Recommended Valve: DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS}) {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
+                  </button>
+                </div>
+              </div>
+
+              {/* Readout Metrics */}
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
+                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Size</span>
+                  <span className="text-base font-mono font-bold text-cyan-400">
+                    DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS})
+                  </span>
+                  <span className="block text-[10px] font-mono text-slate-500">
+                    Bore Ø{GENERIC_VALVE_SCHEDULE.find((s) => s.dn === valveRecommendation.recommendedDN)?.d_port_mm} mm
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
+                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Rating</span>
+                  <span className="text-base font-mono font-bold text-slate-100">
+                    {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
+                  </span>
+                  <span className="block text-[10px] font-mono text-slate-500">
+                    P_max = {valveRecommendation.maxPressureBarA.toFixed(1)} bar a @ {valveRecommendation.maxTemperatureDegC}°C
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
+                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Required Cv (Capacity)</span>
+                  <span className="text-base font-mono font-bold text-amber-400">
+                    {valveRecommendation.maxRequiredCv} Cv
+                  </span>
+                  <span className="block text-[10px] font-mono text-slate-500">
+                    Rated: {valveRecommendation.recommendedRatedCv} Cv ({valveRecommendation.maxPercentOpen}% open)
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
+                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Min Required Cv (Turndown)</span>
+                  <span className="text-base font-mono font-bold text-slate-100">
+                    {valveRecommendation.minRequiredCv} Cv
+                  </span>
+                  <span className="block text-[10px] font-mono text-emerald-400 font-semibold">
+                    {valveRecommendation.minPercentOpen}% open ({valveRecommendation.turndownRatio}:1 turndown)
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
+                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Operating Travel Span</span>
+                  <span className="text-base font-mono font-bold text-emerald-400">
+                    {valveRecommendation.minPercentOpen}% — {valveRecommendation.maxPercentOpen}%
+                  </span>
+                  <span className="block text-[10px] font-mono text-slate-500">
+                    Linear Trim (Ideal 15%–85%)
+                  </span>
+                </div>
+
+                <div className="bg-slate-900/90 rounded-lg p-3 border border-slate-700/80">
+                  <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Predicted Noise</span>
+                  <span className="text-base font-mono font-bold text-cyan-400">
+                    {Math.max(...caseResults.map((c) => c.noiseDrilledCage_dBA))} dBA
+                  </span>
+                  <span className="block text-[10px] font-mono text-slate-500">
+                    Std trim: {Math.max(...caseResults.map((c) => c.noiseStandardTrim_dBA))} dBA
+                  </span>
+                </div>
+              </div>
+
+              {/* Engineering Rationale bullet list */}
+              <div className="bg-slate-950/70 rounded-lg p-3 border border-slate-800 text-xs font-mono space-y-1 text-slate-300">
+                {valveRecommendation.rationale.map((r, i) => (
+                  <div key={i} className="flex items-start gap-2">
+                    <span className="text-cyan-400 font-bold">•</span>
+                    <span>{r}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {/* Top Row: Fluid Preset Loader & Piping Envelope */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Fluid Presets & Custom Dimension Overrides */}
+              <div className="lg:col-span-5 bg-slate-800/60 rounded-xl border border-slate-700/60 p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-100 flex items-center gap-2">
+                      <Gauge className="w-4 h-4 text-cyan-400" />
+                      Process Fluid Benchmark Presets & Hardware Overrides
+                    </h2>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Load standard fluid properties or customize bore/stroke/Cv
+                    </p>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-mono text-slate-300 mb-1.5">
+                    Quick-Load Process Fluid Preset (Applies to All Operating Cases)
+                  </label>
+                  <select
+                    onChange={(e) => applyFluidPresetToAllCases(e.target.value)}
+                    defaultValue="BFW_185C"
+                    className="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs font-mono text-cyan-300"
+                  >
+                    {FLUID_PRESETS.map((fp) => (
+                      <option key={fp.id} value={fp.id}>
+                        {fp.name} — [{fp.phase}]
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="grid grid-cols-3 gap-3 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Custom Seat Bore (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      placeholder={`${correlatedValve.d_port_mm}`}
+                      value={customBoreOverride ?? ''}
+                      onChange={(e) =>
+                        setCustomBoreOverride(
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Custom Stroke H (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      placeholder={`${correlatedValve.stroke_mm}`}
+                      value={customStrokeOverride ?? ''}
+                      onChange={(e) =>
+                        setCustomStrokeOverride(
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Custom Rated Cv
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      placeholder={`${correlatedValve.ratedCv}`}
+                      value={customRatedCvOverride ?? ''}
+                      onChange={(e) =>
+                        setCustomRatedCvOverride(
+                          e.target.value ? Number(e.target.value) : null
+                        )
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Swaged Piping & Water-Hammer Envelope */}
+              <div className="lg:col-span-7 bg-slate-800/60 rounded-xl border border-slate-700/60 p-5 shadow-xl space-y-4">
+                <div className="flex items-center justify-between border-b border-slate-700/60 pb-3">
+                  <div>
+                    <h2 className="text-sm font-bold text-slate-100">
+                      Swaged Piping Geometry (FP, FLP, xTP) & Water-Hammer Envelope
+                    </h2>
+                    <p className="text-xs text-slate-400 font-mono">
+                      Coupled concentric reducer/expander head loss & Joukowsky acoustic reflection check
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded bg-slate-900 border border-slate-700 text-xs font-mono text-cyan-400">
+                    Valve d = {correlatedValve.d_mm} mm vs Pipe D1/D2 = {piping.upstreamPipeID_mm}/
+                    {piping.downstreamPipeID_mm} mm
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Upstream Pipe ID D1 (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={piping.upstreamPipeID_mm}
+                      onChange={(e) =>
+                        setPiping({ ...piping, upstreamPipeID_mm: Number(e.target.value) })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Downstream Pipe D2 (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step="1"
+                      value={piping.downstreamPipeID_mm}
+                      onChange={(e) =>
+                        setPiping({ ...piping, downstreamPipeID_mm: Number(e.target.value) })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Pipe Wall t_p (mm)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={piping.pipeWallThickness_mm}
+                      onChange={(e) =>
+                        setPiping({ ...piping, pipeWallThickness_mm: Number(e.target.value) })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Line Length L (m)
+                    </label>
+                    <input
+                      type="number"
+                      step="5"
+                      value={piping.upstreamPipeLength_m}
+                      onChange={(e) =>
+                        setPiping({ ...piping, upstreamPipeLength_m: Number(e.target.value) })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Fast-Close Time (s)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      value={piping.actuatorCloseTime_s}
+                      onChange={(e) =>
+                        setPiping({ ...piping, actuatorCloseTime_s: Number(e.target.value) })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2.5 py-1.5 text-xs font-mono text-slate-100"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-mono text-slate-400 mb-1">
+                      Body Alloy Group
+                    </label>
+                    <select
+                      value={piping.bodyMaterialCategory}
+                      onChange={(e) =>
+                        setPiping({
+                          ...piping,
+                          bodyMaterialCategory: e.target.value as
+                            | 'CARBON_STEEL'
+                            | 'STAINLESS_ALLOY',
+                        })
+                      }
+                      className="w-full bg-slate-900 border border-slate-700 rounded px-2 py-1.5 text-xs font-mono text-cyan-300"
+                    >
+                      <option value="STAINLESS_ALLOY">SS / Cr-Mo (≤15 m/s)</option>
+                      <option value="CARBON_STEEL">Carbon Steel (≤10.5 m/s)</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -2254,6 +2271,26 @@ export default function App() {
                       />
                     </div>
 
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-300 mb-1">
+                        Hole Spacing Design Priority (2D Center-to-Center P / Ligament L)
+                      </label>
+                      <select
+                        value={holeSpacingRule}
+                        onChange={(e) => setHoleSpacingRule(e.target.value as HoleSpacingRuleId)}
+                        className="w-full bg-slate-950 border border-slate-700 rounded px-2.5 py-1.5 text-[11px] font-mono text-cyan-300"
+                      >
+                        {Object.values(HOLE_SPACING_RULES).map((rule) => (
+                          <option key={rule.id} value={rule.id}>
+                            {rule.label}
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] font-mono text-slate-400 mt-1">
+                        Driver: {HOLE_SPACING_RULES[holeSpacingRule].driver}
+                      </p>
+                    </div>
+
                     <label className="flex items-center gap-2 text-[11px] font-mono text-slate-300 cursor-pointer pt-0.5">
                       <input
                         type="checkbox"
@@ -2272,6 +2309,19 @@ export default function App() {
                     <span className="text-slate-400">Cage ID / OD:</span>
                     <span className="text-slate-100 font-semibold">
                       Ø{cageSynthesis.cageID_mm} mm / Ø{cageSynthesis.cageOD_mm} mm
+                    </span>
+                  </div>
+                  <div className="flex justify-between">
+                    <span className="text-slate-400">Min 2D Hole Spacing (P / L):</span>
+                    <span
+                      className={
+                        cageSynthesis.minPitchToDiaRatio >=
+                        HOLE_SPACING_RULES[holeSpacingRule].minPitchToDia - 0.02
+                          ? 'text-emerald-400 font-bold'
+                          : 'text-amber-400 font-bold'
+                      }
+                    >
+                      P = {cageSynthesis.minPitchToDiaRatio}d | L = {cageSynthesis.minLigamentToDiaRatio}d
                     </span>
                   </div>
                   <div className="flex justify-between">
@@ -2496,17 +2546,16 @@ export default function App() {
                           fillOpacity="0.38"
                         />
 
-                        {/* Drilled Orifice Rows (True vertical hole span [zBottom_mm .. zTop_mm] showing axial row overlap) */}
+                        {/* Drilled Orifice Rows (True physical scale radii rxPx, ryPx so 2D spacing matches exact ligament) */}
                         {cageSynthesis.rows.map((row) => {
                           const cy = padT + plotH - (row.zElevation_mm / maxZ) * plotH;
-                          // True vertical radius in SVG pixels so adjacent rows visually overlap when p_z < d_h
                           const ryPx = Math.max(
-                            3.5,
+                            2.0,
                             ((row.holeDia_mm * 0.5) / maxZ) * plotH
                           );
                           const rxPx = Math.max(
-                            3.5,
-                            Math.min(12, ((row.holeDia_mm * 0.5) / circum) * plotW * 1.15)
+                            2.0,
+                            ((row.holeDia_mm * 0.5) / circum) * plotW
                           );
 
                           // Circular-segment open fraction of this row at plugZ_mm

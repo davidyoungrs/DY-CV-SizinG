@@ -63,6 +63,8 @@ export function recommendValveSizeAndRating(params: {
   flowDirection: FlowDirectionId;
   reducedTrimFactor: number;
   useExtendedStroke: boolean;
+  characteristicType?: 'LINEAR' | 'EQUAL_PCT' | 'MODIFIED_EQUAL_PCT' | 'BI_LINEAR' | 'QUICK_OPENING' | 'MODIFIED_PARABOLIC' | 'CUSTOM_SPLINE' | 'AUTO_FIT_CONSTANT_GAIN';
+  equalPctRangeability?: number;
 }): ValveSelectionRecommendation {
   const activeCases = params.cases.filter((c) => c.enabled);
   const lifeCycleYears = 10;
@@ -143,8 +145,8 @@ export function recommendValveSizeAndRating(params: {
         Fd: valve.Fd,
         stages: 1,
         drilledHoleDia_mm: 4.0,
-        characteristicType: 'LINEAR',
-        equalPctRangeability: 50,
+        characteristicType: params.characteristicType || 'LINEAR',
+        equalPctRangeability: params.equalPctRangeability || 50,
       })
     );
 
@@ -152,6 +154,8 @@ export function recommendValveSizeAndRating(params: {
     const minCv = Math.min(...evaluatedCases.map((c) => c.requiredCv));
     const maxPct = (maxCv / valve.ratedCv) * 100;
     const minPct = (minCv / valve.ratedCv) * 100;
+    const maxTravelPct = Math.max(...evaluatedCases.map((c) => c.estimatedTravelPct));
+    const minTravelPct = Math.min(...evaluatedCases.map((c) => c.estimatedTravelPct));
 
     // --- SIBANDA (2022) CHAPTER 6 LEAST-COST LIFE-CYCLE MODEL ---
     // Nominal Valve Diameter D in meters
@@ -190,23 +194,17 @@ export function recommendValveSizeAndRating(params: {
     let isSuitable = false;
     let reason = '';
 
-    // ISA / IEC Control Valve Best Practices:
-    // Max operating Cv should be <= 85% (preferably 65-80%)
-    // Min operating Cv should be >= 10% (preferably >= 15%)
-    if (maxPct > 95) {
-      reason = `Undersized: Max case requires ${maxPct.toFixed(1)}% of rated Cv (exceeds 90-95% ceiling)`;
-    } else if (maxPct > 85) {
-      reason = `Marginal: Max case at ${maxPct.toFixed(1)}% of rated Cv (little headroom for process upsets)`;
-    } else if (maxPct < 35 && minPct < 8) {
-      reason = `Oversized: Valve operating near closed seat (${minPct.toFixed(1)}% at min), poor controllability`;
-    } else if (maxPct >= 50 && maxPct <= 85 && minPct >= 10) {
+    // Strict 60%–90% Max Cv Capacity Rule:
+    // Max required Cv must be >= 60% and <= 90% of valve's maximum rated Cv
+    if (maxPct > 90) {
+      reason = `Undersized: Max case requires ${maxPct.toFixed(1)}% of rated Cv (exceeds 90% ceiling)`;
+    } else if (maxPct >= 60 && maxPct <= 90) {
       isSuitable = true;
-      reason = `Optimal: Max case at ${maxPct.toFixed(1)}% open (safe headroom), Min case at ${minPct.toFixed(1)}% open`;
-    } else if (maxPct >= 35 && maxPct <= 90 && minPct >= 8) {
-      isSuitable = true;
-      reason = `Acceptable: Max case at ${maxPct.toFixed(1)}% open, Min case at ${minPct.toFixed(1)}% open`;
+      reason = `Optimal (60–90% Rule): Max Cv at ${maxPct.toFixed(1)}% of rated capacity (${maxTravelPct.toFixed(1)}% open), Min at ${minTravelPct.toFixed(1)}% open`;
+    } else if (maxPct >= 40 && maxPct < 60) {
+      reason = `Oversized (<60%): Max Cv is ${maxPct.toFixed(1)}% of rated Cv (consider reduced trim factor to bring into 60–90% band)`;
     } else {
-      reason = `Capacity max ${maxPct.toFixed(1)}%, min ${minPct.toFixed(1)}%`;
+      reason = `Oversized: Max Cv is ${maxPct.toFixed(1)}% of rated Cv (< 60% floor)`;
     }
 
     return {
@@ -217,6 +215,8 @@ export function recommendValveSizeAndRating(params: {
       minCv,
       maxPct,
       minPct,
+      maxTravelPct,
+      minTravelPct,
       isSuitable,
       reason,
       sibandaMaterialCost_GBP: Math.round(M1_GBP),
@@ -228,28 +228,25 @@ export function recommendValveSizeAndRating(params: {
     };
   });
 
-  // Pick best size: first suitable size with maxPct between 55% and 85%
-  let best = candidateEvaluations.find((c) => c.isSuitable && c.maxPct <= 85 && c.maxPct >= 50);
+  // Pick best size: strictly in [60%, 90%] of rated Cv capacity
+  let best = candidateEvaluations.find((c) => c.maxPct >= 60 && c.maxPct <= 90);
   if (!best) {
-    best = candidateEvaluations.find((c) => c.isSuitable);
-  }
-  if (!best) {
-    // If no size is strictly optimal, pick the smallest size where maxPct < 90%
-    best = candidateEvaluations.find((c) => c.maxPct <= 90) || candidateEvaluations[4]; // fallback DN50/80
+    // Fallback if DN step jumps over [60%, 90%]: smallest DN where maxPct <= 90%
+    best = candidateEvaluations.find((c) => c.maxPct <= 90) || candidateEvaluations[candidateEvaluations.length - 1];
   }
 
   // Sibanda (2022) Chapter 6 Least-Cost Life-Cycle Optimal DN
-  const feasibleForCost = candidateEvaluations.filter((c) => c.maxPct <= 95);
+  const feasibleForCost = candidateEvaluations.filter((c) => c.maxPct <= 90);
   const leastCostCandidate =
     (feasibleForCost.length > 0 ? feasibleForCost : candidateEvaluations).reduce((prev, curr) =>
       curr.sibandaTotalLifeCycleCost_GBP < prev.sibandaTotalLifeCycleCost_GBP ? curr : prev
     );
 
   const rationale: string[] = [
-    `Process pressure boundary requires ${PRESSURE_CLASSES[selectedClass].label} for P_max = ${maxP1.toFixed(1)} bar a at T_max = ${maxT}°C.`,
-    `Max required flow coefficient Cv_max = ${best.maxCv.toFixed(1)} across all active process conditions.`,
-    `Selected valve DN${best.dn} (${best.nps}) with Linear rated Cv = ${best.ratedCv} provides ${best.maxPct.toFixed(1)}% opening at max flow (ideal 60-85% band) and ${best.minPct.toFixed(1)}% at minimum turndown (turndown ratio ${(best.maxCv / Math.max(0.1, best.minCv)).toFixed(1)}:1).`,
-    `Sibanda (2022) Ch. 6 Least-Cost Life-Cycle Analysis (${lifeCycleYears}-yr Mfg + Pumping Energy): Selected DN${best.dn} Total Cost = £${best.sibandaTotalLifeCycleCost_GBP.toLocaleString()} (Mfg £${best.sibandaManufacturingCost_GBP.toLocaleString()} + Op £${best.sibandaOperatingEnergyCost_GBP.toLocaleString()}); Economic Minimum = DN${leastCostCandidate.dn} (£${leastCostCandidate.sibandaTotalLifeCycleCost_GBP.toLocaleString()}).`,
+    `Step 1–2 (Process & Cv): Evaluated ${activeCases.length} operating conditions; P_max = ${maxP1.toFixed(1)} bar a at T_max = ${maxT}°C, Cv_max = ${best.maxCv.toFixed(1)}.`,
+    `Step 3 (Size & Rating, 60–90% Rule): Selected ${PRESSURE_CLASSES[selectedClass].label}, DN${best.dn} (${best.nps}) with rated Cv = ${best.ratedCv} (Cv_max is ${best.maxPct.toFixed(1)}% of rated capacity${best.maxPct < 60 ? ' — <60% due to standard DN step; reduced trim optional' : ''}).`,
+    `Step 4 (% Open on ${params.characteristicType || 'LINEAR'}): Operating travel spans ${best.minTravelPct.toFixed(1)}% to ${best.maxTravelPct.toFixed(1)}% open (turndown ${(best.maxCv / Math.max(0.1, best.minCv)).toFixed(1)}:1).`,
+    `Sibanda (2022) Ch. 6 Least-Cost Life-Cycle (${lifeCycleYears}-yr Mfg + Pumping Energy): Selected DN${best.dn} = £${best.sibandaTotalLifeCycleCost_GBP.toLocaleString()} (Mfg £${best.sibandaManufacturingCost_GBP.toLocaleString()} + Op £${best.sibandaOperatingEnergyCost_GBP.toLocaleString()}); Economic Minimum = DN${leastCostCandidate.dn} (£${leastCostCandidate.sibandaTotalLifeCycleCost_GBP.toLocaleString()}).`,
   ];
 
   return {
@@ -262,8 +259,8 @@ export function recommendValveSizeAndRating(params: {
     turndownRatio: Number((best.maxCv / Math.max(0.1, best.minCv)).toFixed(1)),
     maxPressureBarA: maxP1,
     maxTemperatureDegC: maxT,
-    maxPercentOpen: Number(best.maxPct.toFixed(1)),
-    minPercentOpen: Number(best.minPct.toFixed(1)),
+    maxPercentOpen: Number(best.maxTravelPct.toFixed(1)),
+    minPercentOpen: Number(best.minTravelPct.toFixed(1)),
     rationale,
     sibandaLeastCostDN: leastCostCandidate.dn,
     sibandaLeastCostNPS: leastCostCandidate.nps,

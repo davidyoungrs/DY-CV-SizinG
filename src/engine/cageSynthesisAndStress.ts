@@ -373,6 +373,44 @@ export interface ContinuousUncoveringPoint {
   activeOverlappingRowsCount: number; // Number of rows simultaneously being uncovered at lift h
 }
 
+export type HoleSpacingRuleId =
+  | 'ABS_MIN_1_5D'
+  | 'STD_HIGH_CAP_1_75D'
+  | 'LOW_NOISE_ANTI_CAV_2_25D';
+
+export const HOLE_SPACING_RULES: Record<
+  HoleSpacingRuleId,
+  {
+    id: HoleSpacingRuleId;
+    label: string;
+    minPitchToDia: number;
+    minLigamentToDia: number;
+    driver: string;
+  }
+> = {
+  ABS_MIN_1_5D: {
+    id: 'ABS_MIN_1_5D',
+    label: 'Absolute Mechanical Minimum (P ≥ 1.50d | L ≥ 0.50d)',
+    minPitchToDia: 1.5,
+    minLigamentToDia: 0.5,
+    driver: 'Structural integrity, machining limits, and plug bearing area',
+  },
+  STD_HIGH_CAP_1_75D: {
+    id: 'STD_HIGH_CAP_1_75D',
+    label: 'Standard High-Capacity Trim (P = 1.75d–2.00d | L = 0.75d–1.00d)',
+    minPitchToDia: 1.85,
+    minLigamentToDia: 0.85,
+    driver: 'Balancing high Cv with hoop/axial stress resistance',
+  },
+  LOW_NOISE_ANTI_CAV_2_25D: {
+    id: 'LOW_NOISE_ANTI_CAV_2_25D',
+    label: 'Low-Noise / Anti-Cavitation (P = 2.00d–3.00d | L = 1.00d–2.00d)',
+    minPitchToDia: 2.25,
+    minLigamentToDia: 1.25,
+    driver: 'Preventing jet coalescence and acoustic regeneration',
+  },
+};
+
 export interface CageSynthesisAndStressResult {
   rows: CageHoleRow[];
   continuousProfile: ContinuousUncoveringPoint[];
@@ -388,7 +426,9 @@ export interface CageSynthesisAndStressResult {
   meanRowOverlapPct: number; // Average axial overlap % between adjacent staggered rows
   minActiveOverlappingRows: number;
   curveFitRMSDeviationPct: number; // RMS error between actual circular-segment Cv(h) and target curve
-  minPitchToDiaRatio: number;
+  holeSpacingRule: HoleSpacingRuleId;
+  minPitchToDiaRatio: number; // True 2D cylindrical minimum center-to-center pitch / d_avg
+  minLigamentToDiaRatio: number; // True 2D edge-to-edge ligament / d_avg
   jetCoalescenceCompliant: boolean;
   minLigamentWidth_mm: number;
   minLigamentEfficiency: number;
@@ -435,6 +475,7 @@ export function synthesizeDrilledCageAndStress(params: {
   requireNaceSourService: boolean;
   enforceZeroDeadbandOverlap?: boolean; // Defaults to true!
   targetRowOverlapPct?: number; // Defaults to 28% axial overlap between staggered rows
+  holeSpacingRule?: HoleSpacingRuleId; // Defaults to 'STD_HIGH_CAP_1_75D'
 }): CageSynthesisAndStressResult {
   const {
     cageID_mm,
@@ -455,7 +496,11 @@ export function synthesizeDrilledCageAndStress(params: {
     requireNaceSourService,
     enforceZeroDeadbandOverlap = true,
     targetRowOverlapPct = 28,
+    holeSpacingRule = 'STD_HIGH_CAP_1_75D',
   } = params;
+
+  const spacingRuleSpec = HOLE_SPACING_RULES[holeSpacingRule];
+  const reqPitchRatio = spacingRuleSpec.minPitchToDia;
 
   const D_ID = Math.max(12, cageID_mm);
   const H = Math.max(10, stroke_mm);
@@ -506,12 +551,52 @@ export function synthesizeDrilledCageAndStress(params: {
     zCenters.push(Number((zStart + frac * (zEnd - zStart)).toFixed(2)));
   }
 
-  // Step 2: Sequential Target Curve Matching using Exact Circular-Segment Uncovering!
-  // At each row top elevation z_top,k, we choose integer hole count n_k so the actual
-  // cumulative circular-segment area (including partially uncovered overlapping upper rows!)
-  // tracks the target inherent characteristic curve A_target(z).
+  // Step 2: Sequential Target Curve Matching with Exact 2D Cylindrical Hole Collision Prevention
+  // Guarantees ZERO hole-to-hole intersection and enforces center-to-center pitch P >= reqPitchRatio * d_avg
+  // across all holes in the same row AND all nearby overlapping staggered rows!
   const rows: CageHoleRow[] = [];
   let cumulativeFullArea_mm2 = 0;
+
+  interface PlacedHole2D {
+    z_mm: number;
+    s_mm: number; // circumferential position [0 .. circumference_mm)
+    d_mm: number;
+  }
+  const placedHoles: PlacedHole2D[] = [];
+
+  const evaluateMin2DRatioForCandidateRow = (
+    z_k: number,
+    d_k: number,
+    n_k: number,
+    offset_deg: number
+  ): { minRatio: number; minLig_mm: number; minPitch_mm: number } => {
+    const p_theta = circumference_mm / n_k;
+    let minRatio = p_theta / d_k;
+    let minLig_mm = p_theta - d_k;
+    let minPitch_mm = p_theta;
+
+    for (let j = 0; j < n_k; j++) {
+      const deg = (offset_deg + (j * 360) / n_k) % 360;
+      const s_k = (deg / 360) * circumference_mm;
+
+      for (const prev of placedHoles) {
+        const dz = Math.abs(z_k - prev.z_mm);
+        const dAvg = 0.5 * (d_k + prev.d_mm);
+        if (dz >= reqPitchRatio * dAvg * 1.15) continue;
+
+        let ds = Math.abs(s_k - prev.s_mm);
+        if (ds > circumference_mm * 0.5) ds = circumference_mm - ds;
+
+        const dist2D = Math.sqrt(dz * dz + ds * ds);
+        const ratio = dist2D / dAvg;
+        const lig = dist2D - dAvg;
+        if (ratio < minRatio) minRatio = ratio;
+        if (lig < minLig_mm) minLig_mm = lig;
+        if (dist2D < minPitch_mm) minPitch_mm = dist2D;
+      }
+    }
+    return { minRatio, minLig_mm, minPitch_mm };
+  };
 
   for (let k = 0; k < N_rows; k++) {
     const rowIndex = k + 1;
@@ -537,8 +622,7 @@ export function synthesizeDrilledCageAndStress(params: {
     const phiCurr = evaluateInherentPhi(hCurr, characteristicConfig);
     const deltaPhi = Math.max(1 / (N_rows * 3.5), phiCurr - phiPrev);
 
-    // Sibanda (2022) Eq. 5.10 Row Elevation Factor HT^0.15013:
-    // Upper rows have slightly higher specific capacity per unit area due to reduced gallery pressure loss
+    // Sibanda (2022) Eq. 5.10 Row Elevation Factor HT^0.15013
     const HT_nonDim = Math.max(0.08, Math.min(1.0, z_k / H));
     const sibandaElevationFactor = Number(
       (0.93 + 0.14 * Math.pow(HT_nonDim, 0.15013)).toFixed(3)
@@ -548,27 +632,71 @@ export function synthesizeDrilledCageAndStress(params: {
       (deltaPhi * requiredTotalArea_mm2) / sibandaElevationFactor;
     const singleHoleArea_mm2 = (Math.PI / 4) * d_k * d_k;
 
-    // Respect both circumferential ligament (>= 1.5 mm) and staggered diagonal ligament (>= 1.5 mm)
-    const maxHolesCircumferential = Math.max(
+    // Geometric upper bound on n_k accounting for M_band interfering rows within dz < P_min!
+    const p_z_nominal = N_rows > 1 ? (zEnd - zStart) / (N_rows - 1) : H;
+    const minReqPitch_mm = reqPitchRatio * d_k;
+    const M_band = Math.max(
+      enforceZeroDeadbandOverlap ? 3 : 2,
+      Math.ceil(minReqPitch_mm / Math.max(0.5, p_z_nominal))
+    );
+    const minLateralSpacing_mm = Math.sqrt(
+      Math.max(0, minReqPitch_mm * minReqPitch_mm - p_z_nominal * p_z_nominal)
+    );
+    const effectiveMinCircumPitch_mm = Math.max(
+      minReqPitch_mm,
+      M_band * Math.max(minLateralSpacing_mm, d_k * 0.85)
+    );
+    const maxHolesGeometric = Math.max(
       2,
-      Math.floor(circumference_mm / Math.max(d_k * 1.8, d_k + 1.6))
+      Math.floor(circumference_mm / Math.max(d_k * 1.5, effectiveMinCircumPitch_mm))
     );
 
-    let n_k = Math.round(targetRowArea_mm2 / singleHoleArea_mm2);
-    if (n_k < 2) n_k = 2; // Minimum 2 diametrically opposed holes for balanced radial jet forces
-    n_k = Math.min(maxHolesCircumferential, n_k);
+    let n_k = Math.max(2, Math.min(maxHolesGeometric, Math.round(targetRowArea_mm2 / singleHoleArea_mm2)));
+
+    // Exact 2D cylindrical placement: search optimal angular phase offset and decrement n_k if any hole pair violates P >= reqPitchRatio * d_avg
+    let bestOffset_deg = 0;
+    let bestEval = evaluateMin2DRatioForCandidateRow(z_k, d_k, n_k, 0);
+
+    while (n_k >= 2) {
+      const pitchStepDeg = 360 / n_k;
+      let localBestOffset = 0;
+      let localBestEval = { minRatio: -1, minLig_mm: -99, minPitch_mm: 0 };
+
+      // Test 18 phase angles within [0, pitchStepDeg)
+      const numPhases = 18;
+      for (let p = 0; p < numPhases; p++) {
+        const candOffset = Number(((p / numPhases) * pitchStepDeg).toFixed(1));
+        const ev = evaluateMin2DRatioForCandidateRow(z_k, d_k, n_k, candOffset);
+        if (ev.minRatio > localBestEval.minRatio) {
+          localBestEval = ev;
+          localBestOffset = candOffset;
+        }
+      }
+
+      bestOffset_deg = localBestOffset;
+      bestEval = localBestEval;
+
+      if (bestEval.minRatio >= reqPitchRatio - 0.01 || n_k === 2) {
+        break;
+      }
+      n_k--;
+    }
+
+    // Record placed holes for collision checking subsequent rows
+    for (let j = 0; j < n_k; j++) {
+      const deg = (bestOffset_deg + (j * 360) / n_k) % 360;
+      placedHoles.push({
+        z_mm: z_k,
+        s_mm: (deg / 360) * circumference_mm,
+        d_mm: d_k,
+      });
+    }
 
     const p_theta = circumference_mm / n_k;
-    const p_diag =
-      k > 0
-        ? Math.sqrt(p_z * p_z + Math.pow(p_theta / 2, 2))
-        : p_theta;
-
-    const pitchToDia = p_theta / d_k;
-    const ligCircum = Math.max(0.2, p_theta - d_k);
-    const ligDiag = k > 0 ? Math.max(0.2, p_diag - avgPairDia) : ligCircum;
-    const ligWidth = Math.min(ligCircum, ligDiag);
-    const ligEfficiency = ligWidth / Math.min(p_theta, p_diag);
+    const p_diag = bestEval.minPitch_mm;
+    const pitchToDia = bestEval.minRatio;
+    const ligWidth = Math.max(0.2, bestEval.minLig_mm);
+    const ligEfficiency = ligWidth / Math.max(0.5, bestEval.minPitch_mm);
 
     const rowArea_mm2 = n_k * singleHoleArea_mm2;
     cumulativeFullArea_mm2 += rowArea_mm2;
@@ -582,14 +710,6 @@ export function synthesizeDrilledCageAndStress(params: {
           1 / Math.pow(Math.max(0.1, cvSeatComponent), 2) +
           1 / Math.pow(Math.max(0.1, cvBodyComponent), 2)
       );
-
-    // Helical / staggered angular offset so overlapping adjacent rows never drill into each other
-    const angularOffset_deg =
-      k % 2 === 1
-        ? Number((180 / n_k).toFixed(1))
-        : k % 4 === 2
-        ? Number((90 / n_k).toFixed(1))
-        : 0;
 
     rows.push({
       rowIndex,
@@ -611,7 +731,7 @@ export function synthesizeDrilledCageAndStress(params: {
       rowArea_mm2: Number(rowArea_mm2.toFixed(1)),
       cumulativeArea_mm2: Number(cumulativeFullArea_mm2.toFixed(1)),
       cumulativeCv: Number(compositeCumulativeCv.toFixed(2)),
-      angularOffset_deg,
+      angularOffset_deg: bestOffset_deg,
       sibandaRowElevationFactor: sibandaElevationFactor,
     });
   }
@@ -740,6 +860,9 @@ export function synthesizeDrilledCageAndStress(params: {
   const minPitchToDiaRatio = Number(
     Math.min(...rows.map((r) => r.pitchToDiaRatio)).toFixed(2)
   );
+  const minLigamentToDiaRatio = Number(
+    Math.max(0, minPitchToDiaRatio - 1.0).toFixed(2)
+  );
   const jetCoalescenceCompliant = minPitchToDiaRatio >= 2.0;
   const minLigamentWidth_mm = Number(
     Math.min(...rows.map((r) => r.ligamentWidth_mm)).toFixed(2)
@@ -806,7 +929,7 @@ export function synthesizeDrilledCageAndStress(params: {
   } else if (
     hoopStressUtilizationPct > 80 ||
     collapseSafetyFactor < 3.0 ||
-    !jetCoalescenceCompliant ||
+    minPitchToDiaRatio < reqPitchRatio - 0.05 ||
     deadbandStrokePct > 0
   ) {
     structuralStatus = 'WARNING';
@@ -827,7 +950,9 @@ export function synthesizeDrilledCageAndStress(params: {
     minActiveOverlappingRows:
       minActiveOverlappingRows === 99 ? 1 : minActiveOverlappingRows,
     curveFitRMSDeviationPct,
+    holeSpacingRule,
     minPitchToDiaRatio,
+    minLigamentToDiaRatio,
     jetCoalescenceCompliant,
     minLigamentWidth_mm,
     minLigamentEfficiency,
