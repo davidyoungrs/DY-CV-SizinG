@@ -1,0 +1,22 @@
+# Dependencies
+node_modules
+.pnp
+.pnp.js
+
+# Build outputs
+dist
+dist-ssr
+*.local
+
+# Logs
+logs
+*.log
+npm-debug.log*
+
+# Editor & macOS metadata
+.DS_Store
+._*
+.vscode/*
+!.vscode/extensions.json
+.idea
+.vercel
