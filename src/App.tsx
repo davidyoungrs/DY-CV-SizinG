@@ -26,6 +26,7 @@ import {
   TRIM_STYLES,
   GENERIC_VALVE_SCHEDULE,
   REDUCED_TRIM_FACTORS,
+  ROTARY_VALVE_BENCHMARKS,
   PressureClassId,
   TrimStyleId,
   BodyStyleId,
@@ -38,6 +39,7 @@ import {
   PipingConfiguration,
   FLUID_PRESETS,
   evaluateOperatingCase,
+  evaluateBackpressureOrificeSharing,
 } from './engine/iec60534Sizing';
 
 import {
@@ -101,6 +103,8 @@ export default function App() {
   const [customBoreOverride, setCustomBoreOverride] = useState<number | null>(null);
   const [customStrokeOverride, setCustomStrokeOverride] = useState<number | null>(null);
   const [customRatedCvOverride, setCustomRatedCvOverride] = useState<number | null>(null);
+  const [enableBackpressureOrifice, setEnableBackpressureOrifice] = useState<boolean>(false);
+  const [orificeDeltaPSharePct, setOrificeDeltaPSharePct] = useState<number>(45);
 
   // 2. Piping & Multi-Condition Process State
   const [piping, setPiping] = useState<PipingConfiguration>({
@@ -342,9 +346,38 @@ export default function App() {
             drilledHoleDia_mm: cageSynthesis.meanHoleDia_mm,
             characteristicType: charConfig.type,
             equalPctRangeability: charConfig.equalPctRangeability,
+            stroke_mm: correlatedValve.stroke_mm,
+            flowDirection,
+            cageMaterialId: cageMaterial,
           })
         ),
-    [operatingCases, piping, correlatedValve, cageSynthesis, trimStyle, charConfig]
+    [
+      operatingCases,
+      piping,
+      correlatedValve,
+      cageSynthesis,
+      trimStyle,
+      charConfig,
+      flowDirection,
+      cageMaterial,
+    ]
+  );
+
+  const backpressureOrificeResult = useMemo(
+    () =>
+      enableBackpressureOrifice
+        ? evaluateBackpressureOrificeSharing({
+            cases: operatingCases.filter((c) => c.enabled),
+            downstreamPipeID_mm: piping.downstreamPipeID_mm,
+            orificeDeltaPShareAtMaxPct: orificeDeltaPSharePct,
+          })
+        : null,
+    [
+      enableBackpressureOrifice,
+      operatingCases,
+      piping.downstreamPipeID_mm,
+      orificeDeltaPSharePct,
+    ]
   );
 
   // Automated Valve Size & Pressure Rating Recommender based on all process conditions (60–90% Max Cv Rule)
@@ -374,16 +407,17 @@ export default function App() {
     ]
   );
 
-  const charSimulation = useMemo(
-    () =>
-      simulateCharacteristicCurves({
-        config: charConfig,
-        ratedCv: correlatedValve.ratedCv,
-        stroke_mm: correlatedValve.stroke_mm,
-        maxSystemDeltaP_bar: maxShutoffDeltaP_bar,
-      }),
-    [charConfig, correlatedValve, maxShutoffDeltaP_bar]
-  );
+  const charSimulation = useMemo(() => {
+    const activeCvs = caseResults.map((r) => r.requiredCv).filter((v) => v > 0);
+    return simulateCharacteristicCurves({
+      config: charConfig,
+      ratedCv: correlatedValve.ratedCv,
+      stroke_mm: correlatedValve.stroke_mm,
+      maxSystemDeltaP_bar: maxShutoffDeltaP_bar,
+      maxOperatingRequiredCv: activeCvs.length > 0 ? Math.max(...activeCvs) : undefined,
+      minOperatingRequiredCv: activeCvs.length > 0 ? Math.min(...activeCvs) : undefined,
+    });
+  }, [charConfig, correlatedValve, maxShutoffDeltaP_bar, caseResults]);
 
   const thermalResult = useMemo(
     () =>
@@ -502,6 +536,7 @@ export default function App() {
         molecularWeight: preset.molecularWeight,
         gammaCpCv: preset.gammaCpCv,
         compressibilityZ: preset.compressibilityZ,
+        massFractionGas_fg: preset.massFractionGas_fg,
       }))
     );
     setFinalProcessTemp_degC(preset.defaultT1_degC);
@@ -758,7 +793,7 @@ export default function App() {
                           <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
                             {renderParamLabel(
                               'Phase',
-                              'Fluid state at the valve inlet: LIQUID (incompressible IEC 60534-2-1), GAS (compressible), or STEAM (vapor).'
+                              'Fluid state at the valve inlet: LIQUID (IEC 60534-2-1), GAS (compressible), STEAM (IAPWS saturation/superheat), or TWO_PHASE (Parcol separated/homogeneous flashing mixture).'
                             )}
                           </th>
                           {operatingCases.map((c, idx) => (
@@ -775,6 +810,7 @@ export default function App() {
                                 <option value="LIQUID">LIQUID</option>
                                 <option value="GAS">GAS</option>
                                 <option value="STEAM">STEAM</option>
+                                <option value="TWO_PHASE">TWO_PHASE</option>
                               </select>
                             </td>
                           ))}
@@ -996,6 +1032,42 @@ export default function App() {
                           ))}
                         </tr>
 
+                        {operatingCases.some((c) => c.fluidPhase === 'TWO_PHASE') && (
+                          <tr className="hover:bg-[#f8fafc]">
+                            <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                              {renderParamLabel(
+                                'Gas/Vapor Mass Frac fg',
+                                'Inlet gas/vapor mass quality fg (0 to 1) for TWO_PHASE sizing. Uses Parcol §4.3 separated model for fg < 0.05 or homogeneous Ve model for fg >= 0.05.'
+                              )}
+                            </th>
+                            {operatingCases.map((c, idx) => (
+                              <td key={c.id} className="py-2 px-2.5">
+                                {c.fluidPhase === 'TWO_PHASE' ? (
+                                  <input
+                                    type="number"
+                                    min="0.001"
+                                    max="0.99"
+                                    step="0.01"
+                                    value={c.massFractionGas_fg ?? 0.15}
+                                    onChange={(e) => {
+                                      const next = [...operatingCases];
+                                      next[idx].massFractionGas_fg = Math.min(
+                                        0.99,
+                                        Math.max(0.001, Number(e.target.value))
+                                      );
+                                      setOperatingCases(next);
+                                    }}
+                                    className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                    title="Gas/Vapor Mass Fraction fg (0.001–0.99)"
+                                  />
+                                ) : (
+                                  <span className="text-slate-400 text-[11px]">—</span>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        )}
+
                         {/* LIVE CALCULATED OUTPUT ROWS (DARK INSTRUMENT TELEMETRY) */}
                         <tr className="bg-[#0f1419] text-slate-200 border-t-2 border-[#2f3b47]">
                           <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
@@ -1066,6 +1138,98 @@ export default function App() {
                             );
                           })}
                         </tr>
+
+                        <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#7fe0e2] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                            {renderParamLabel(
+                              'Req. FL / Effective FL(h)',
+                              'Warren VSSTR-07 Required FL = sqrt(dP/(P1-FF*Pv)) vs stroke-dependent valve recovery FL(h) and xT(h) at predicted plug travel.'
+                            )}
+                          </th>
+                          {operatingCases.map((c) => {
+                            const res = caseResults.find((r) => r.id === c.id);
+                            const flWarn =
+                              res && res.fluidPhase === 'LIQUID' && res.FL_required > res.FL_effectiveAtTravel;
+                            return (
+                              <td
+                                key={c.id}
+                                className="py-2.5 px-2.5 bg-[#182028] border-l border-[#2f3b47]"
+                              >
+                                {res ? (
+                                  <div className="flex flex-col gap-0.5 text-[11px]">
+                                    <div className="flex items-baseline justify-between gap-1">
+                                      <span className={flWarn ? 'font-bold text-[#ffd77a]' : 'font-bold text-[#8be0a8]'}>
+                                        {res.fluidPhase === 'LIQUID'
+                                          ? `Req ${res.FL_required}`
+                                          : res.twoPhaseModelUsed
+                                          ? '2Φ Mix'
+                                          : `xT ${res.xT_effectiveAtTravel}`}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400">
+                                        {res.fluidPhase === 'LIQUID'
+                                          ? `FL(h)=${res.FL_effectiveAtTravel}`
+                                          : res.steamSuperheat_degC !== undefined
+                                          ? `ΔTsup ${res.steamSuperheat_degC}°C`
+                                          : `FM ${res.multistageFactorFM}`}
+                                      </span>
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+
+                        <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                            {renderParamLabel(
+                              'ISA-RP75.23 σ / σ_mr & OSHA',
+                              'Service cavitation index σ vs ISA-RP75.23 max recommended damage limit σ_mr (with Parcol material hardness index), plus OSHA/NIOSH acoustic shift.'
+                            )}
+                          </th>
+                          {operatingCases.map((c) => {
+                            const res = caseResults.find((r) => r.id === c.id);
+                            const sigmaColor = !res
+                              ? 'text-slate-500'
+                              : res.fluidPhase !== 'LIQUID'
+                              ? 'text-[#7fe0e2]'
+                              : res.sigmaCavitation < res.sigmaConstant_c
+                              ? 'text-[#ff8a80]'
+                              : res.sigmaCavitation < res.sigmaRecommended_mr
+                              ? 'text-[#ffd77a]'
+                              : 'text-[#8be0a8]';
+                            return (
+                              <td
+                                key={c.id}
+                                className="py-2.5 px-2.5 bg-[#182028] border-l border-[#2f3b47]"
+                              >
+                                {res ? (
+                                  <div className="flex flex-col gap-0.5 text-[11px]">
+                                    <div className="flex items-baseline justify-between gap-1">
+                                      <span className={`font-bold ${sigmaColor}`}>
+                                        {res.fluidPhase === 'LIQUID'
+                                          ? `σ=${res.sigmaCavitation}`
+                                          : `FM=${res.multistageFactorFM}`}
+                                      </span>
+                                      <span className="text-[10px] text-slate-400">
+                                        {res.fluidPhase === 'LIQUID'
+                                          ? `σ_mr=${res.sigmaRecommended_mr}`
+                                          : `SPLe ${res.expanderNoise_dBA}dB`}
+                                      </span>
+                                    </div>
+                                    <span className="text-[9px] text-slate-400 truncate">
+                                      {res.oshaNioshExposureSummary}
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
                       </tbody>
                     </table>
                   );
@@ -1085,9 +1249,12 @@ export default function App() {
                     Includes coupled reducer/expander factors (FP, FLP, xTP), Strouhal ultrasonic frequency shift (fp), and Joukowsky surge
                   </p>
                 </div>
-                <div className="flex items-center gap-2 text-xs font-mono">
+                <div className="flex flex-wrap items-center gap-2 text-xs font-mono">
                   <span className="px-2.5 py-1 rounded bg-[#182028] border border-[#2f3b47] text-slate-300">
-                    Pipe Ring Freq f_r: <strong className="text-[#7fe0e2]">{caseResults[0]?.ringFreq_Hz || 15000} Hz</strong>
+                    Pipe Coinc. f_o: <strong className="text-[#8be0a8]">{caseResults[0]?.coincidenceFreq_Hz || 2600} Hz</strong>
+                  </span>
+                  <span className="px-2.5 py-1 rounded bg-[#182028] border border-[#2f3b47] text-slate-300">
+                    Pipe Ring f_r: <strong className="text-[#7fe0e2]">{caseResults[0]?.ringFreq_Hz || 15000} Hz</strong>
                   </span>
                   <span className="px-2.5 py-1 rounded bg-[#182028] border border-[#2f3b47] text-slate-300">
                     Mean Cage Orifice Ød_h: <strong className="text-[#ffd77a]">{cageSynthesis.meanHoleDia_mm} mm</strong>
@@ -1207,41 +1374,91 @@ export default function App() {
                   </table>
                 </div>
 
-                {/* Water-Hammer & Flashing Advisory Footnote (Dark Instrument Telemetry) */}
-                {caseResults.some((r) => r.fluidPhase === 'LIQUID') && (
-                  <div className="instrument-panel rounded-xl p-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                {/* Water-Hammer, Thiruvengadam Erosion, Coincidence/Expander & Low-Freq Pulsation Telemetry */}
+                {caseResults.length > 0 && (
+                  <div className="instrument-panel rounded-xl p-3 grid grid-cols-1 md:grid-cols-3 gap-3">
                     <div className="instrument-tile rounded-lg p-3.5 text-xs font-mono">
                       <span className="text-slate-400 block uppercase text-[10px] mb-1">
-                        Joukowsky Water-Hammer Fast-Close Surge Check (Skousen Ch. 9)
+                        Joukowsky Surge & Thiruvengadam Endurance
+                      </span>
+                      {caseResults.some((r) => r.fluidPhase === 'LIQUID') ? (
+                        <p className="text-slate-200">
+                          Peak Surge:{' '}
+                          <strong className="text-[#ffd77a]">
+                            +{Math.max(...caseResults.map((c) => c.joukowskySurge_bar))} bar
+                          </strong>{' '}
+                          (t_safe ≥{' '}
+                          <strong className="text-[#7fe0e2]">
+                            {caseResults[0]?.minSafeCloseTime_s} s
+                          </strong>
+                          ). Implosion P_wh ={' '}
+                          <strong
+                            className={
+                              Math.max(...caseResults.map((c) => c.thiruvengadamErosionRatioPct)) >= 100
+                                ? 'text-[#ff8a80]'
+                                : 'text-[#8be0a8]'
+                            }
+                          >
+                            {Math.max(...caseResults.map((c) => c.waterHammerSurfacePressure_MPa))} MPa
+                          </strong>{' '}
+                          vs σ_1/3 = {caseResults[0]?.thiruvengadamEnduranceLimit_MPa} MPa (
+                          {Math.max(...caseResults.map((c) => c.thiruvengadamErosionRatioPct))}%).
+                        </p>
+                      ) : (
+                        <p className="text-slate-200">
+                          Compressible/Two-Phase Service: Joukowsky surge N/A. Active model:{' '}
+                          <strong className="text-[#7fe0e2]">
+                            {caseResults[0]?.twoPhaseModelUsed ||
+                              (caseResults[0]?.steamSuperheat_degC !== undefined
+                                ? `IAPWS Steam ΔTsup = ${caseResults[0].steamSuperheat_degC}°C (F_SH=${caseResults[0].steamSuperheatFactorFSH})`
+                                : 'IEC 60534-2-1 Compressible')}
+                          </strong>
+                          .
+                        </p>
+                      )}
+                    </div>
+                    <div className="instrument-tile rounded-lg p-3.5 text-xs font-mono">
+                      <span className="text-slate-400 block uppercase text-[10px] mb-1">
+                        IEC 60534-8-3 Shift, Coincidence f_o & Expander SPL_E
                       </span>
                       <p className="text-slate-200">
-                        Peak Fast-Close Pressure Surge:{' '}
+                        <strong className="text-[#7fe0e2]">{cageSynthesis.totalHoles} orifices</strong>{' '}
+                        (Ø{cageSynthesis.meanHoleDia_mm} mm) shift f_p to{' '}
                         <strong className="text-[#ffd77a]">
-                          +{Math.max(...caseResults.map((c) => c.joukowskySurge_bar))} bar
+                          {caseResults[0]?.strouhalPeakFreq_Hz.toLocaleString()} Hz
                         </strong>{' '}
-                        at t_close = {piping.actuatorCloseTime_s}s. Recommended minimum stroke time to eliminate reflection wave overlap:{' '}
-                        <strong className="text-[#7fe0e2]">
-                          ≥ {caseResults[0]?.minSafeCloseTime_s} s
+                        vs pipe coincidence f_o ={' '}
+                        <strong className="text-[#8be0a8]">
+                          {caseResults[0]?.coincidenceFreq_Hz.toLocaleString()} Hz
+                        </strong>
+                        ; peak expander SPL_E ={' '}
+                        <strong className="text-[#ffd77a]">
+                          {Math.max(...caseResults.map((c) => c.expanderNoise_dBA))} dBA
                         </strong>
                         .
                       </p>
                     </div>
                     <div className="instrument-tile rounded-lg p-3.5 text-xs font-mono">
                       <span className="text-slate-400 block uppercase text-[10px] mb-1">
-                        IEC 60534-8-3 Ultrasonic Frequency Shift Mechanism
+                        Valve Aspect H/d_port & Low-Freq Pulsation Check
                       </span>
                       <p className="text-slate-200">
-                        Dividing total flow area into{' '}
-                        <strong className="text-[#7fe0e2]">{cageSynthesis.totalHoles} drilled orifices</strong>{' '}
-                        (Ø{cageSynthesis.meanHoleDia_mm} mm) shifts the Strouhal peak frequency to{' '}
-                        <strong className="text-[#ffd77a]">
-                          {caseResults[0]?.strouhalPeakFreq_Hz.toLocaleString()} Hz
+                        H / d_port ={' '}
+                        <strong className="text-[#7fe0e2]">
+                          {caseResults[0]?.strokeToPortAspectRatio}
                         </strong>
-                        , maximizing pipe-wall transmission loss and reducing external noise by up to{' '}
-                        <strong className="text-[#8be0a8]">
-                          {Math.max(...caseResults.map((c) => c.noiseAttenuation_dBA))} dBA
-                        </strong>
-                        .
+                        .{' '}
+                        <span
+                          className={
+                            caseResults[0]?.lowFreqPulsationRisk
+                              ? 'text-[#ffd77a] font-semibold'
+                              : 'text-[#8be0a8]'
+                          }
+                        >
+                          {caseResults[0]?.lowFreqPulsationRisk
+                            ? 'WARNING (Masoneilan/Parcol): Low H/d_port with FTO/high-ΔP gas risks 10–150 Hz instability; consider FTC or 2-stage cage.'
+                            : 'PASS: Aspect ratio & flow direction keep low-frequency acoustic instability risk minimal.'}
+                        </span>
                       </p>
                     </div>
                   </div>
@@ -1560,6 +1777,136 @@ export default function App() {
               </div>
             </div>
 
+            {/* DOWNSTREAM BACKPRESSURE ORIFICE / DIFFUSER PRESSURE-SHARING CALCULATOR */}
+            <div className="dy-card overflow-hidden">
+              <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#0b2545] border border-[#f2a900]/60 flex items-center justify-center text-[#7fe0e2]">
+                    <Layers className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white">
+                      Downstream Backpressure Orifice / Diffuser Pressure-Sharing Calculator (Parcol / Masoneilan)
+                    </h2>
+                    <p className="text-xs text-slate-300 font-mono">
+                      Raises valve outlet P2* using a downstream fixed orifice/diffuser to suppress cavitation/flashing at high flows
+                    </p>
+                  </div>
+                </div>
+                <label className="flex items-center gap-2 text-xs font-mono text-white cursor-pointer bg-[#0b2545] px-3 py-1.5 rounded border border-[#2f3b47]">
+                  <input
+                    type="checkbox"
+                    checked={enableBackpressureOrifice}
+                    onChange={(e) => setEnableBackpressureOrifice(e.target.checked)}
+                    className="rounded accent-[#0f8b8d]"
+                  />
+                  <span>Enable Downstream Backpressure Orifice</span>
+                </label>
+              </div>
+
+              <div className="p-5 space-y-4">
+                <div className="flex flex-wrap items-center gap-6">
+                  <div className="flex-1 min-w-[260px]">
+                    <div className="flex justify-between text-xs font-mono text-[#13315c] mb-1">
+                      <span>Max-Flow ΔP Share Assigned to Downstream Orifice (%)</span>
+                      <span className="font-bold text-[#0f8b8d]">{orificeDeltaPSharePct}%</span>
+                    </div>
+                    <input
+                      type="range"
+                      min="10"
+                      max="75"
+                      step="1"
+                      value={orificeDeltaPSharePct}
+                      disabled={!enableBackpressureOrifice}
+                      onChange={(e) => setOrificeDeltaPSharePct(Number(e.target.value))}
+                      className="w-full accent-[#0f8b8d] disabled:opacity-40"
+                    />
+                  </div>
+                  <p className="text-xs font-mono text-slate-500 max-w-xl">
+                    Note: Orifice ΔP scales quadratically with flow (Q²). Raising P2* at high flow shifts cavitation & supersonic expansion to the static plate, whereas low-flow turndown retains ~full system ΔP on the valve.
+                  </p>
+                </div>
+
+                {enableBackpressureOrifice && backpressureOrificeResult && (
+                  <div className="instrument-panel rounded-xl p-4 space-y-4">
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-3 font-mono text-xs">
+                      <div className="instrument-tile rounded-lg p-3">
+                        <span className="text-[10px] text-slate-400 uppercase block">Design Governing Case</span>
+                        <strong className="text-sm text-[#ffd77a]">
+                          {backpressureOrificeResult.designMaxCaseLabel}
+                        </strong>
+                        <span className="block text-[10px] text-slate-400 mt-0.5">
+                          Orifice ΔP = {backpressureOrificeResult.orificeDeltaPAtMax_bar} bar
+                        </span>
+                      </div>
+                      <div className="instrument-tile rounded-lg p-3">
+                        <span className="text-[10px] text-slate-400 uppercase block">Required Orifice Cv</span>
+                        <strong className="text-sm text-[#7fe0e2]">
+                          {backpressureOrificeResult.orificeRatedCv} Cv
+                        </strong>
+                        <span className="block text-[10px] text-slate-400 mt-0.5">
+                          Fixed restriction plate
+                        </span>
+                      </div>
+                      <div className="instrument-tile rounded-lg p-3">
+                        <span className="text-[10px] text-slate-400 uppercase block">Equiv. Orifice Bore Ø</span>
+                        <strong className="text-sm text-[#8be0a8]">
+                          Ø{backpressureOrificeResult.equivalentOrificeBore_mm} mm
+                        </strong>
+                        <span className="block text-[10px] text-slate-400 mt-0.5">
+                          β = {backpressureOrificeResult.orificeBetaRatio} in DN D2 ({piping.downstreamPipeID_mm} mm)
+                        </span>
+                      </div>
+                      <div className="instrument-tile rounded-lg p-3">
+                        <span className="text-[10px] text-slate-400 uppercase block">Cases Cavitation Resolved</span>
+                        <strong className="text-sm text-[#8be0a8]">
+                          {backpressureOrificeResult.caseShares.filter((s) => s.sharedCavitationResolved).length} /{' '}
+                          {backpressureOrificeResult.caseShares.length} Cases
+                        </strong>
+                        <span className="block text-[10px] text-slate-400 mt-0.5">
+                          Post-orifice valve σ check
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className="overflow-x-auto">
+                      <table className="w-full text-left border-collapse text-xs font-mono">
+                        <thead>
+                          <tr className="border-b border-[#2f3b47] text-slate-400">
+                            <th className="py-2 px-3">Case</th>
+                            <th className="py-2 px-2">Orig ΔP_v (bar)</th>
+                            <th className="py-2 px-2">Orifice ΔP (bar)</th>
+                            <th className="py-2 px-2">Interstage P_mid (bar a)</th>
+                            <th className="py-2 px-2">New Valve ΔP_v* (bar)</th>
+                            <th className="py-2 px-2">Cavitation σ (Before → After)</th>
+                            <th className="py-2 px-2">Valve Noise Drop</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-[#2f3b47]/60 text-slate-200">
+                          {backpressureOrificeResult.caseShares.map((s) => (
+                            <tr key={s.id} className="hover:bg-[#182028]">
+                              <td className="py-2 px-3 font-semibold text-[#ffd77a]">{s.label}</td>
+                              <td className="py-2 px-2">{s.originalValveDeltaP_bar}</td>
+                              <td className="py-2 px-2 text-[#7fe0e2]">{s.orificeDeltaP_bar}</td>
+                              <td className="py-2 px-2 text-[#8be0a8]">{s.midPressurePmid_bar_a}</td>
+                              <td className="py-2 px-2 font-bold">{s.sharedValveDeltaP_bar}</td>
+                              <td className="py-2 px-2">
+                                {s.originalSigma} →{' '}
+                                <span className={s.sharedCavitationResolved ? 'text-[#8be0a8] font-bold' : 'text-[#ff8a80] font-bold'}>
+                                  {s.sharedSigma}
+                                </span>
+                              </td>
+                              <td className="py-2 px-2 text-[#8be0a8]">-{s.sharedNoiseReduction_dBA} dBA</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+
           </div>
         )}
 
@@ -1788,6 +2135,40 @@ export default function App() {
                       </span>
                     </div>
                   </div>
+                  <div className="grid grid-cols-3 gap-2 text-center font-mono">
+                    <div className="instrument-tile p-2 rounded">
+                      <span className="block text-[10px] text-slate-400">Installed Headroom</span>
+                      <span
+                        className={`text-sm font-bold ${
+                          charSimulation.nelesSafetyFactorTrapWarning ? 'text-[#ff8a80]' : 'text-[#8be0a8]'
+                        }`}
+                      >
+                        {charSimulation.nelesInstalledHeadroomPct}%
+                      </span>
+                      <span className="block text-[9px] text-slate-400">
+                        at {charSimulation.nelesInstalledMaxFlowPctOfMax}% Q_max
+                      </span>
+                    </div>
+                    <div className="instrument-tile p-2 rounded">
+                      <span className="block text-[10px] text-slate-400">True Min Cv (1/R)</span>
+                      <span className="text-sm font-bold text-[#7fe0e2]">
+                        {charSimulation.trueMinControllableCv} Cv
+                      </span>
+                      <span className="block text-[9px] text-slate-400">Warren Table 1</span>
+                    </div>
+                    <div className="instrument-tile p-2 rounded">
+                      <span className="block text-[10px] text-slate-400">1% Stiction Swing</span>
+                      <span className="text-sm font-bold text-[#ffd77a]">
+                        ±{charSimulation.peakDeadbandFlowSwingPct}%
+                      </span>
+                      <span className="block text-[9px] text-slate-400">Deadband flow error</span>
+                    </div>
+                  </div>
+                  {charSimulation.nelesSafetyFactorTrapWarning && (
+                    <div className="rounded bg-[#ff8a80]/15 border border-[#ff8a80]/40 px-2.5 py-1.5 text-[11px] font-mono text-[#ff8a80]">
+                      Neles Safety-Factor Trap: Low Pv distorts installed curve — headroom above max required flow is under 10%.
+                    </div>
+                  )}
                   <p className="text-xs font-mono text-slate-300 leading-relaxed">
                     {charSimulation.recommendedCharacteristicNote}
                   </p>
@@ -3672,6 +4053,72 @@ export default function App() {
                           </td>
                           <td className="py-2.5 px-2 font-bold text-amber-700">
                             {(s.ratedCvBaseline.CAGE_3STAGE * kClass).toFixed(1)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+
+            {/* ROTARY & QUARTER-TURN CONTROL VALVE BENCHMARK COMPARISON (WARREN / BAUMANN / CED / NELES) */}
+            <div className="dy-card overflow-hidden">
+              <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#0b2545] border border-[#f2a900]/60 flex items-center justify-center text-[#7fe0e2]">
+                    <Gauge className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white">
+                      Rotary & Quarter-Turn Control Valve Benchmark Reference (DN{selectedDN} / {PRESSURE_CLASSES[pressureClass].label})
+                    </h2>
+                    <p className="text-xs text-slate-300 font-mono">
+                      Typical wide-open specific capacity Cd = Cv/d² and low-recovery factors vs linear globe/cage valves (Warren / Baumann Ch. 5 / Neles)
+                    </p>
+                  </div>
+                </div>
+              </div>
+              <div className="p-5 overflow-x-auto">
+                <table className="w-full text-left border-collapse text-xs font-mono">
+                  <thead>
+                    <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5]">
+                      <th className="py-2.5 px-3">Rotary Valve Style</th>
+                      <th className="py-2.5 px-2">Motion / Geometry</th>
+                      <th className="py-2.5 px-2">Cd (Cv/in²)</th>
+                      <th className="py-2.5 px-2 text-[#0f8b8d]">Est. DN{selectedDN} Rated Cv</th>
+                      <th className="py-2.5 px-2">FL (90°)</th>
+                      <th className="py-2.5 px-2">Kc (90°)</th>
+                      <th className="py-2.5 px-2">xT (90°)</th>
+                      <th className="py-2.5 px-2">Fd</th>
+                      <th className="py-2.5 px-2">Rangeability R</th>
+                      <th className="py-2.5 px-2">Characteristic</th>
+                      <th className="py-2.5 px-3">Service Notes</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-[#e2e8f0]">
+                    {ROTARY_VALVE_BENCHMARKS.map((b) => {
+                      const dIn = correlatedValve.d_mm / 25.4;
+                      const estCv = Math.round(
+                        b.cdSpecificCapacity *
+                          dIn *
+                          dIn *
+                          PRESSURE_CLASSES[pressureClass].capacityMultiplierKClass
+                      );
+                      return (
+                        <tr key={b.id} className="hover:bg-[#f8fafc]">
+                          <td className="py-2.5 px-3 font-bold text-[#0b2545]">{b.styleName}</td>
+                          <td className="py-2.5 px-2 text-slate-600">{b.motionType}</td>
+                          <td className="py-2.5 px-2 text-[#0b2545]">{b.cdSpecificCapacity.toFixed(1)}</td>
+                          <td className="py-2.5 px-2 font-bold text-[#0f8b8d]">{estCv} Cv</td>
+                          <td className="py-2.5 px-2">{b.FL_90deg.toFixed(2)}</td>
+                          <td className="py-2.5 px-2">{b.Kc_90deg.toFixed(2)}</td>
+                          <td className="py-2.5 px-2">{b.xT_90deg.toFixed(2)}</td>
+                          <td className="py-2.5 px-2">{b.Fd_typical.toFixed(2)}</td>
+                          <td className="py-2.5 px-2 font-semibold text-emerald-700">{b.rangeability}</td>
+                          <td className="py-2.5 px-2 text-slate-700">{b.characteristic}</td>
+                          <td className="py-2.5 px-3 text-slate-600 text-[11px] min-w-[260px]">
+                            {b.notes}
                           </td>
                         </tr>
                       );

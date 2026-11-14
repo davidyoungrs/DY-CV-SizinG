@@ -1,14 +1,16 @@
 import {
   GENERIC_VALVE_SCHEDULE,
   PRESSURE_CLASSES,
+  computeCorrelatedValveParameters,
+} from './valveSchedule.ts';
+import type {
   PressureClassId,
   TrimStyleId,
   BodyStyleId,
   FlowDirectionId,
-  computeCorrelatedValveParameters,
-  CorrelatedValveParameters,
 } from './valveSchedule.ts';
-import { OperatingPointInput, PipingConfiguration, evaluateOperatingCase, CaseSizingResult } from './iec60534Sizing.ts';
+import { evaluateOperatingCase } from './iec60534Sizing.ts';
+import type { OperatingPointInput, PipingConfiguration } from './iec60534Sizing.ts';
 
 export interface ValveSelectionRecommendation {
   recommendedDN: number;
@@ -147,6 +149,8 @@ export function recommendValveSizeAndRating(params: {
         drilledHoleDia_mm: 4.0,
         characteristicType: params.characteristicType || 'LINEAR',
         equalPctRangeability: params.equalPctRangeability || 50,
+        stroke_mm: valve.stroke_mm,
+        flowDirection: params.flowDirection,
       })
     );
 
@@ -242,11 +246,22 @@ export function recommendValveSizeAndRating(params: {
       curr.sibandaTotalLifeCycleCost_GBP < prev.sibandaTotalLifeCycleCost_GBP ? curr : prev
     );
 
+  const effectiveR =
+    params.characteristicType === 'EQUAL_PCT' || params.characteristicType === 'MODIFIED_EQUAL_PCT'
+      ? Math.max(20, params.equalPctRangeability || 50)
+      : 30;
+  const trueMinControllableCv = Number((best.ratedCv / effectiveR).toFixed(2));
+  const warrenRangeabilityNote =
+    best.minCv < trueMinControllableCv
+      ? `WARNING: Min Cv (${best.minCv.toFixed(2)}) < true controllable floor Cv_rated/${effectiveR} (${trueMinControllableCv}). Consider reduced trim or split-range valve.`
+      : `PASS: Min Cv (${best.minCv.toFixed(2)}) >= true controllable floor Cv_rated/${effectiveR} (${trueMinControllableCv}).`;
+
   const rationale: string[] = [
     `Step 1–2 (Process & Cv): Evaluated ${activeCases.length} operating conditions; P_max = ${maxP1.toFixed(1)} bar a at T_max = ${maxT}°C, Cv_max = ${best.maxCv.toFixed(1)}.`,
     `Step 3 (Size & Rating, 60–90% Rule): Selected ${PRESSURE_CLASSES[selectedClass].label}, DN${best.dn} (${best.nps}) with rated Cv = ${best.ratedCv} (Cv_max is ${best.maxPct.toFixed(1)}% of rated capacity${best.maxPct < 60 ? ' — <60% due to standard DN step; reduced trim optional' : ''}).`,
     `Step 4 (% Open on ${params.characteristicType || 'LINEAR'}): Operating travel spans ${best.minTravelPct.toFixed(1)}% to ${best.maxTravelPct.toFixed(1)}% open (turndown ${(best.maxCv / Math.max(0.1, best.minCv)).toFixed(1)}:1).`,
     `Sibanda (2022) Ch. 6 Least-Cost Life-Cycle (${lifeCycleYears}-yr Mfg + Pumping Energy): Selected DN${best.dn} = £${best.sibandaTotalLifeCycleCost_GBP.toLocaleString()} (Mfg £${best.sibandaManufacturingCost_GBP.toLocaleString()} + Op £${best.sibandaOperatingEnergyCost_GBP.toLocaleString()}); Economic Minimum = DN${leastCostCandidate.dn} (£${leastCostCandidate.sibandaTotalLifeCycleCost_GBP.toLocaleString()}).`,
+    `Warren Table 1 True Rangeability Check (Cv_rated / R = ${best.ratedCv} / ${effectiveR}): ${warrenRangeabilityNote}`,
   ];
 
   return {

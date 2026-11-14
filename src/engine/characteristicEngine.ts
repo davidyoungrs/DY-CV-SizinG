@@ -41,6 +41,11 @@ export interface CharacteristicSimulationSummary {
   gainRatioWorkingSpan: number;
   stabilityBandCoveragePct: number; // % of 15-85% travel within [0.5, 2.0]
   recommendedCharacteristicNote: string;
+  trueMinControllableCv: number; // Warren Table 1: Cv_rated / R (50 for Eq-%, 30 for Linear)
+  nelesInstalledMaxFlowPctOfMax: number; // Neles: % of installed max system flow delivered at operating max Cv
+  nelesInstalledHeadroomPct: number; // Neles: remaining installed flow headroom (100 - maxFlow%)
+  nelesSafetyFactorTrapWarning: boolean; // True when inherent phi <= 88% yet installed headroom < 10%
+  peakDeadbandFlowSwingPct: number; // Flow excursion (%) per 1% valve stiction / deadband at max working gain
 }
 
 /**
@@ -182,6 +187,8 @@ export function simulateCharacteristicCurves(params: {
   ratedCv: number;
   stroke_mm: number;
   maxSystemDeltaP_bar: number;
+  maxOperatingRequiredCv?: number;
+  minOperatingRequiredCv?: number;
 }): CharacteristicSimulationSummary {
   const { config, ratedCv, stroke_mm, maxSystemDeltaP_bar } = params;
   const Pv = Math.max(0.03, Math.min(1.0, config.valveAuthorityPv));
@@ -240,6 +247,23 @@ export function simulateCharacteristicCurves(params: {
     (stableCount / Math.max(1, workingPoints.length)) * 100
   );
 
+  const { maxOperatingRequiredCv, minOperatingRequiredCv } = params;
+  const effectiveRangeability =
+    config.type === 'EQUAL_PCT' || config.type === 'MODIFIED_EQUAL_PCT'
+      ? Math.max(20, config.equalPctRangeability || 50)
+      : 30;
+  const trueMinControllableCv = Number((ratedCv / effectiveRangeability).toFixed(2));
+
+  const phiMaxOp = Math.min(
+    1,
+    Math.max(0.01, (maxOperatingRequiredCv ?? ratedCv * 0.75) / Math.max(0.01, ratedCv))
+  );
+  const instMaxFrac = phiMaxOp / Math.sqrt(Math.max(1e-6, Pv + (1 - Pv) * phiMaxOp * phiMaxOp));
+  const nelesInstalledMaxFlowPctOfMax = Number((instMaxFrac * 100).toFixed(1));
+  const nelesInstalledHeadroomPct = Number(Math.max(0, 100 - nelesInstalledMaxFlowPctOfMax).toFixed(1));
+  const nelesSafetyFactorTrapWarning = phiMaxOp <= 0.88 && nelesInstalledHeadroomPct < 10;
+  const peakDeadbandFlowSwingPct = Number((maxInstalledGainWorkingSpan * 1.0).toFixed(2));
+
   let recommendedCharacteristicNote = '';
   if (Pv < 0.25 && config.type === 'LINEAR') {
     recommendedCharacteristicNote = `Low Valve Authority (Pv = ${Pv.toFixed(2)}): Linear trim suffers severe upper-travel gain drop-off. Switch to Equal-% or Auto-Fit Constant Gain.`;
@@ -251,6 +275,13 @@ export function simulateCharacteristicCurves(params: {
     recommendedCharacteristicNote = `Partial Gain Excursion (${stabilityBandCoveragePct}% in [0.5, 2.0] band). Use "Auto-Fit Constant Installed Gain" or adjust custom spline points.`;
   }
 
+  if (nelesSafetyFactorTrapWarning) {
+    recommendedCharacteristicNote += ` Neles Alert: Inherent utilization is ${(phiMaxOp * 100).toFixed(0)}%, yet installed headroom is only ${nelesInstalledHeadroomPct}% at Pv = ${Pv.toFixed(2)}.`;
+  }
+  if (minOperatingRequiredCv !== undefined && minOperatingRequiredCv < trueMinControllableCv) {
+    recommendedCharacteristicNote += ` Warren Table 1 Alert: Min required Cv (${minOperatingRequiredCv.toFixed(2)}) is below true controllable floor Cv_rated/${effectiveRangeability} (${trueMinControllableCv}).`;
+  }
+
   return {
     points,
     minInstalledGainWorkingSpan,
@@ -258,5 +289,10 @@ export function simulateCharacteristicCurves(params: {
     gainRatioWorkingSpan,
     stabilityBandCoveragePct,
     recommendedCharacteristicNote,
+    trueMinControllableCv,
+    nelesInstalledMaxFlowPctOfMax,
+    nelesInstalledHeadroomPct,
+    nelesSafetyFactorTrapWarning,
+    peakDeadbandFlowSwingPct,
   };
 }

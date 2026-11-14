@@ -901,3 +901,116 @@ export function computeCorrelatedValveParameters(params: {
     cageWallRecommended_mm,
   };
 }
+
+/**
+ * Evaluates stroke- and flow-direction-dependent pressure recovery & choked flow factors
+ * per Parcol Bulletin 1-I (Fig. 6) and Warren Controls VSSTR-07/12 (Table 3).
+ * At lower travel %, throttling at the seat metering edge increases FL(h); at 100% open it converges to FL_rated.
+ */
+export function evaluateStrokeDependentRecovery(params: {
+  FL_rated: number;
+  Kc_rated: number;
+  xT_rated: number;
+  travelPct: number;
+  stages: number;
+  flowDirection: FlowDirectionId;
+}): { FL_atTravel: number; Kc_atTravel: number; xT_atTravel: number } {
+  const h = Math.max(0.05, Math.min(1.0, params.travelPct / 100));
+  const lowLiftBoost = params.stages >= 2 ? 0.02 : 0.06;
+  const directionShape =
+    params.stages === 1 && params.flowDirection === 'FTC'
+      ? 1 - Math.pow(h, 0.85)
+      : 1 - Math.pow(h, 1.35);
+
+  const FL_atTravel = Math.min(
+    0.99,
+    Math.max(0.35, params.FL_rated + lowLiftBoost * directionShape)
+  );
+  const ratio = FL_atTravel / Math.max(0.2, params.FL_rated);
+  const Kc_atTravel = Math.min(0.98, Math.max(0.25, params.Kc_rated * ratio * ratio));
+  const xT_atTravel = Math.min(0.95, Math.max(0.15, params.xT_rated * Math.pow(ratio, 1.3)));
+
+  return {
+    FL_atTravel: Number(FL_atTravel.toFixed(3)),
+    Kc_atTravel: Number(Kc_atTravel.toFixed(3)),
+    xT_atTravel: Number(xT_atTravel.toFixed(3)),
+  };
+}
+
+export interface RotaryValveBenchmarkSpec {
+  id: string;
+  styleName: string;
+  motionType: string;
+  cdSpecificCapacity: number; // Cv / d_in^2 at 90 deg open
+  FL_90deg: number;
+  Kc_90deg: number;
+  xT_90deg: number;
+  Fd_typical: number;
+  rangeability: string;
+  rangeabilityValue: number;
+  characteristic: string;
+  notes: string;
+}
+
+/**
+ * Rotary Control Valve Benchmarks (CED Engineering M04-034, Warren Table 1, Baumann Ch. 5 & Neles)
+ * Provided in Tab 6 Master Schedule for linear globe/cage vs. high-capacity rotary comparison.
+ */
+export const ROTARY_VALVE_BENCHMARKS: RotaryValveBenchmarkSpec[] = [
+  {
+    id: 'ROTARY_ECCENTRIC_PLUG',
+    styleName: 'Eccentric Rotary Plug Valve',
+    motionType: '90° Rotary Cammed Plug',
+    cdSpecificCapacity: 24.0,
+    FL_90deg: 0.68,
+    Kc_90deg: 0.52,
+    xT_90deg: 0.55,
+    Fd_typical: 0.42,
+    rangeability: '100:1',
+    rangeabilityValue: 100,
+    characteristic: 'Modified Linear / Equal-%',
+    notes: 'Cammed eccentric plug clears seat immediately to cut breakaway torque; good erosive & slurry capability.',
+  },
+  {
+    id: 'ROTARY_SEGMENTED_VBALL',
+    styleName: 'Segmented V-Notch Ball Valve',
+    motionType: '90° Characterized Ball Segment',
+    cdSpecificCapacity: 30.0,
+    FL_90deg: 0.62,
+    Kc_90deg: 0.46,
+    xT_90deg: 0.42,
+    Fd_typical: 0.45,
+    rangeability: '200:1',
+    rangeabilityValue: 200,
+    characteristic: 'Equal-%',
+    notes: 'Shearing V-notch action provides ultra-wide 200:1 rangeability and fibrous/viscous service capability.',
+  },
+  {
+    id: 'ROTARY_HP_BUTTERFLY',
+    styleName: 'High-Performance Eccentric Butterfly',
+    motionType: '90° Double-Offset Disc',
+    cdSpecificCapacity: 32.0,
+    FL_90deg: 0.58,
+    Kc_90deg: 0.40,
+    xT_90deg: 0.35,
+    Fd_typical: 0.48,
+    rangeability: '50:1',
+    rangeabilityValue: 50,
+    characteristic: 'Linear / Modified Equal-%',
+    notes: 'High-capacity low-recovery disc (low FL); throttle typically restricted to 15°–70° for dynamic torque stability.',
+  },
+  {
+    id: 'ROTARY_FULL_BORE_BALL',
+    styleName: 'Full-Bore Trunnion Control Ball',
+    motionType: '90° Full-Port Ball (Multi-Attenuator Opt.)',
+    cdSpecificCapacity: 42.0,
+    FL_90deg: 0.52,
+    Kc_90deg: 0.34,
+    xT_90deg: 0.25,
+    Fd_typical: 0.90,
+    rangeability: '150:1',
+    rangeabilityValue: 150,
+    characteristic: 'Equal-%',
+    notes: 'Maximum Cd with minimal permanent pressure loss; requires anti-cavitation/noise trim plates at high ΔP ratios.',
+  },
+];
