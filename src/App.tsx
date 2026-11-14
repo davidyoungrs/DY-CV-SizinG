@@ -18,6 +18,7 @@ import {
   Gauge,
   Volume2,
   Wrench,
+  Info,
 } from 'lucide-react';
 
 import {
@@ -689,262 +690,386 @@ export default function App() {
               </div>
 
               <div className="p-5 overflow-x-auto">
-                <table className="w-full text-left border-collapse text-xs font-mono">
-                  <thead>
-                    <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5]">
-                      <th className="py-2.5 px-3 sticky left-0 z-10 bg-[#edf1f5] min-w-[210px] border-r border-[#cfd8e3]">
-                        Parameter / Operating Case
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <th key={c.id} className="py-2 px-2.5 min-w-[140px]">
-                          <div className="flex items-center gap-1.5">
-                            <input
-                              type="text"
-                              value={c.label}
-                              onChange={(e) => {
-                                const next = [...operatingCases];
-                                next[idx].label = e.target.value;
-                                setOperatingCases(next);
-                              }}
-                              className="bg-white border border-[#cfd8e3] rounded px-2 py-1 w-full text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-                              aria-label={`Case ${idx + 1} Name`}
-                            />
-                            {operatingCases.length > 1 && (
-                              <button
-                                onClick={() =>
-                                  setOperatingCases(operatingCases.filter((item) => item.id !== c.id))
-                                }
-                                className="p-1 text-slate-400 hover:text-red-600 transition shrink-0"
-                                title={`Remove ${c.label}`}
-                              >
-                                <Trash2 className="w-3.5 h-3.5" />
-                              </button>
+                {(() => {
+                  const renderParamLabel = (label: string, infoText: string) => (
+                    <div className="flex items-center justify-between gap-2">
+                      <span>{label}</span>
+                      <span className="relative group inline-flex items-center shrink-0">
+                        <button
+                          type="button"
+                          title={infoText}
+                          aria-label={`${label}: ${infoText}`}
+                          className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                        >
+                          <Info className="w-3.5 h-3.5" />
+                        </button>
+                        <span
+                          role="tooltip"
+                          className="hidden group-hover:block group-focus-within:block absolute left-0 top-full mt-1.5 z-40 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                        >
+                          {infoText}
+                        </span>
+                      </span>
+                    </div>
+                  );
+
+                  return (
+                    <table className="w-full text-left border-collapse text-xs font-mono">
+                      <thead>
+                        <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5]">
+                          <th className="py-2.5 px-3 sticky left-0 z-20 bg-[#edf1f5] min-w-[230px] border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'Parameter / Operating Case',
+                              'Each column represents a process operating condition (e.g. Min, Normal, Max, Start-Up, Upset). Edit the case name or remove extra cases.'
                             )}
-                          </div>
-                        </th>
-                      ))}
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-[#e2e8f0]">
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        Phase
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          <select
-                            value={c.fluidPhase}
-                            onChange={(e) => {
-                              const next = [...operatingCases];
-                              next[idx].fluidPhase = e.target.value as any;
-                              setOperatingCases(next);
-                            }}
-                            className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                          >
-                            <option value="LIQUID">LIQUID</option>
-                            <option value="GAS">GAS</option>
-                            <option value="STEAM">STEAM</option>
-                          </select>
-                        </td>
-                      ))}
-                    </tr>
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <th key={c.id} className="py-2 px-2.5 min-w-[145px]">
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="text"
+                                  value={c.label}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    next[idx].label = e.target.value;
+                                    setOperatingCases(next);
+                                  }}
+                                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1 w-full text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                                  aria-label={`Case ${idx + 1} Name`}
+                                />
+                                {operatingCases.length > 1 && (
+                                  <button
+                                    onClick={() =>
+                                      setOperatingCases(operatingCases.filter((item) => item.id !== c.id))
+                                    }
+                                    className="p-1 text-slate-400 hover:text-red-600 transition shrink-0"
+                                    title={`Remove ${c.label}`}
+                                  >
+                                    <Trash2 className="w-3.5 h-3.5" />
+                                  </button>
+                                )}
+                              </div>
+                            </th>
+                          ))}
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e2e8f0]">
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'Phase',
+                              'Fluid state at the valve inlet: LIQUID (incompressible IEC 60534-2-1), GAS (compressible), or STEAM (vapor).'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              <select
+                                value={c.fluidPhase}
+                                onChange={(e) => {
+                                  const next = [...operatingCases];
+                                  next[idx].fluidPhase = e.target.value as any;
+                                  setOperatingCases(next);
+                                }}
+                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                              >
+                                <option value="LIQUID">LIQUID</option>
+                                <option value="GAS">GAS</option>
+                                <option value="STEAM">STEAM</option>
+                              </select>
+                            </td>
+                          ))}
+                        </tr>
 
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        Flow (m³/h | Nm³/h | kg/h)
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          <input
-                            type="number"
-                            step="1"
-                            value={c.flowRate}
-                            onChange={(e) => {
-                              const next = [...operatingCases];
-                              next[idx].flowRate = Number(e.target.value);
-                              setOperatingCases(next);
-                            }}
-                            className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                          />
-                        </td>
-                      ))}
-                    </tr>
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'Flow (m³/h | Nm³/h | kg/h)',
+                              'Process flow rate: volumetric flow in m³/h for Liquid, standard volumetric flow in Nm³/h for Gas, or mass flow in kg/h for Steam.'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              <input
+                                type="number"
+                                step="1"
+                                value={c.flowRate}
+                                onChange={(e) => {
+                                  const next = [...operatingCases];
+                                  next[idx].flowRate = Number(e.target.value);
+                                  setOperatingCases(next);
+                                }}
+                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                              />
+                            </td>
+                          ))}
+                        </tr>
 
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        P1 (bar a)
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          <input
-                            type="number"
-                            step="0.5"
-                            value={c.P1_bar_a}
-                            onChange={(e) => {
-                              const next = [...operatingCases];
-                              next[idx].P1_bar_a = Number(e.target.value);
-                              setOperatingCases(next);
-                            }}
-                            className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                          />
-                        </td>
-                      ))}
-                    </tr>
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'P1 (bar a)',
+                              'Upstream absolute inlet pressure at the valve inlet flange in bar(a). Used to compute ΔP, choked pressure drop, and gas expansion factor Y.'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={c.P1_bar_a}
+                                onChange={(e) => {
+                                  const next = [...operatingCases];
+                                  next[idx].P1_bar_a = Number(e.target.value);
+                                  setOperatingCases(next);
+                                }}
+                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                              />
+                            </td>
+                          ))}
+                        </tr>
 
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        P2 (bar a)
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          <input
-                            type="number"
-                            step="0.5"
-                            value={c.P2_bar_a}
-                            onChange={(e) => {
-                              const next = [...operatingCases];
-                              next[idx].P2_bar_a = Number(e.target.value);
-                              setOperatingCases(next);
-                            }}
-                            className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                          />
-                        </td>
-                      ))}
-                    </tr>
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'P2 (bar a)',
+                              'Downstream absolute outlet pressure at the valve outlet flange in bar(a). ΔP = P1 − P2; also drives cavitation index σ and flashing checks.'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              <input
+                                type="number"
+                                step="0.5"
+                                value={c.P2_bar_a}
+                                onChange={(e) => {
+                                  const next = [...operatingCases];
+                                  next[idx].P2_bar_a = Number(e.target.value);
+                                  setOperatingCases(next);
+                                }}
+                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                              />
+                            </td>
+                          ))}
+                        </tr>
 
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        T1 (°C)
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          <input
-                            type="number"
-                            step="5"
-                            value={c.T1_degC}
-                            onChange={(e) => {
-                              const next = [...operatingCases];
-                              next[idx].T1_degC = Number(e.target.value);
-                              setOperatingCases(next);
-                            }}
-                            className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                          />
-                        </td>
-                      ))}
-                    </tr>
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'T1 (°C)',
+                              'Upstream flowing fluid temperature in °C. Used for ASME B16.34 pressure-temperature rating, gas density, sonic velocity, and thermal expansion.'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              <input
+                                type="number"
+                                step="5"
+                                value={c.T1_degC}
+                                onChange={(e) => {
+                                  const next = [...operatingCases];
+                                  next[idx].T1_degC = Number(e.target.value);
+                                  setOperatingCases(next);
+                                }}
+                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                              />
+                            </td>
+                          ))}
+                        </tr>
 
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        ρ (kg/m³) / MW
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          {c.fluidPhase === 'LIQUID' ? (
-                            <input
-                              type="number"
-                              step="10"
-                              value={c.rho_kg_m3}
-                              onChange={(e) => {
-                                const next = [...operatingCases];
-                                next[idx].rho_kg_m3 = Number(e.target.value);
-                                setOperatingCases(next);
-                              }}
-                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              title="Liquid Density (kg/m³)"
-                            />
-                          ) : (
-                            <input
-                              type="number"
-                              step="0.5"
-                              value={c.molecularWeight}
-                              onChange={(e) => {
-                                const next = [...operatingCases];
-                                next[idx].molecularWeight = Number(e.target.value);
-                                setOperatingCases(next);
-                              }}
-                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              title="Molecular Weight (kg/kmol)"
-                            />
-                          )}
-                        </td>
-                      ))}
-                    </tr>
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'ρ (kg/m³) / MW',
+                              'For Liquid: flowing density ρ in kg/m³. For Gas/Steam: molecular weight MW in kg/kmol.'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              {c.fluidPhase === 'LIQUID' ? (
+                                <input
+                                  type="number"
+                                  step="10"
+                                  value={c.rho_kg_m3}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    next[idx].rho_kg_m3 = Number(e.target.value);
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  title="Liquid Density (kg/m³)"
+                                />
+                              ) : (
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  value={c.molecularWeight}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    next[idx].molecularWeight = Number(e.target.value);
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  title="Molecular Weight (kg/kmol)"
+                                />
+                              )}
+                            </td>
+                          ))}
+                        </tr>
 
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        Pv (bar a) / γ
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          {c.fluidPhase === 'LIQUID' ? (
-                            <input
-                              type="number"
-                              step="0.1"
-                              value={c.Pv_bar_a}
-                              onChange={(e) => {
-                                const next = [...operatingCases];
-                                next[idx].Pv_bar_a = Number(e.target.value);
-                                setOperatingCases(next);
-                              }}
-                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              title="Vapor Pressure Pv (bar a)"
-                            />
-                          ) : (
-                            <input
-                              type="number"
-                              step="0.02"
-                              value={c.gammaCpCv}
-                              onChange={(e) => {
-                                const next = [...operatingCases];
-                                next[idx].gammaCpCv = Number(e.target.value);
-                                setOperatingCases(next);
-                              }}
-                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              title="Specific Heat Ratio Cp/Cv"
-                            />
-                          )}
-                        </td>
-                      ))}
-                    </tr>
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'Pv (bar a) / γ',
+                              'For Liquid: fluid vapor pressure Pv in bar(a) at T1 (governs choked ΔP and cavitation/flashing). For Gas/Steam: specific heat ratio γ = Cp/Cv.'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              {c.fluidPhase === 'LIQUID' ? (
+                                <input
+                                  type="number"
+                                  step="0.1"
+                                  value={c.Pv_bar_a}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    next[idx].Pv_bar_a = Number(e.target.value);
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  title="Vapor Pressure Pv (bar a)"
+                                />
+                              ) : (
+                                <input
+                                  type="number"
+                                  step="0.02"
+                                  value={c.gammaCpCv}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    next[idx].gammaCpCv = Number(e.target.value);
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  title="Specific Heat Ratio Cp/Cv"
+                                />
+                              )}
+                            </td>
+                          ))}
+                        </tr>
 
-                    <tr className="hover:bg-[#f8fafc]">
-                      <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 bg-white border-r border-[#cfd8e3]">
-                        ν (cSt) / Z
-                      </th>
-                      {operatingCases.map((c, idx) => (
-                        <td key={c.id} className="py-2 px-2.5">
-                          {c.fluidPhase === 'LIQUID' ? (
-                            <input
-                              type="number"
-                              step="0.05"
-                              value={c.viscosity_cSt}
-                              onChange={(e) => {
-                                const next = [...operatingCases];
-                                next[idx].viscosity_cSt = Number(e.target.value);
-                                setOperatingCases(next);
-                              }}
-                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              title="Kinematic Viscosity (cSt)"
-                            />
-                          ) : (
-                            <input
-                              type="number"
-                              step="0.02"
-                              value={c.compressibilityZ}
-                              onChange={(e) => {
-                                const next = [...operatingCases];
-                                next[idx].compressibilityZ = Number(e.target.value);
-                                setOperatingCases(next);
-                              }}
-                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              title="Compressibility Factor Z"
-                            />
-                          )}
-                        </td>
-                      ))}
-                    </tr>
-                  </tbody>
-                </table>
+                        <tr className="hover:bg-[#f8fafc]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            {renderParamLabel(
+                              'ν (cSt) / Z',
+                              'For Liquid: kinematic viscosity ν in cSt (used for IEC 60534-2-1 Reynolds correction F_R). For Gas/Steam: compressibility factor Z.'
+                            )}
+                          </th>
+                          {operatingCases.map((c, idx) => (
+                            <td key={c.id} className="py-2 px-2.5">
+                              {c.fluidPhase === 'LIQUID' ? (
+                                <input
+                                  type="number"
+                                  step="0.05"
+                                  value={c.viscosity_cSt}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    next[idx].viscosity_cSt = Number(e.target.value);
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  title="Kinematic Viscosity (cSt)"
+                                />
+                              ) : (
+                                <input
+                                  type="number"
+                                  step="0.02"
+                                  value={c.compressibilityZ}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    next[idx].compressibilityZ = Number(e.target.value);
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  title="Compressibility Factor Z"
+                                />
+                              )}
+                            </td>
+                          ))}
+                        </tr>
+
+                        {/* LIVE CALCULATED OUTPUT ROWS (DARK INSTRUMENT TELEMETRY) */}
+                        <tr className="bg-[#0f1419] text-slate-200 border-t-2 border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                            {renderParamLabel(
+                              'Calculated Req. Cv',
+                              'Required IEC 60534-2-1 flow coefficient (Cv / Kv) for this operating condition, auto-recalculated when valve size, piping, or trim changes.'
+                            )}
+                          </th>
+                          {operatingCases.map((c) => {
+                            const res = caseResults.find((r) => r.id === c.id);
+                            return (
+                              <td
+                                key={c.id}
+                                className="py-2.5 px-2.5 bg-[#182028] border-l border-[#2f3b47]"
+                              >
+                                {res ? (
+                                  <div className="flex items-baseline justify-between gap-1">
+                                    <span className="font-bold text-[#7fe0e2]">
+                                      {res.requiredCv} Cv
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      ({res.requiredKv} Kv)
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+
+                        <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#8be0a8] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                            {renderParamLabel(
+                              'Valve % Open (Travel)',
+                              'Predicted valve plug travel (% open) based on the active valve size, rated Cv, trim style, and flow characteristic curve.'
+                            )}
+                          </th>
+                          {operatingCases.map((c) => {
+                            const res = caseResults.find((r) => r.id === c.id);
+                            const travel = res?.estimatedTravelPct ?? 0;
+                            const travelColor = !res
+                              ? 'text-slate-500'
+                              : travel >= 99 || res.percentOfRatedCv > 90
+                              ? 'text-[#ff8a80]'
+                              : travel < 15 || travel > 85
+                              ? 'text-[#ffd77a]'
+                              : 'text-[#8be0a8]';
+                            return (
+                              <td
+                                key={c.id}
+                                className="py-2.5 px-2.5 bg-[#182028] border-l border-[#2f3b47]"
+                              >
+                                {res ? (
+                                  <div className="flex items-baseline justify-between gap-1">
+                                    <span className={`font-bold ${travelColor}`}>
+                                      {res.estimatedTravelPct}%
+                                    </span>
+                                    <span className="text-[10px] text-slate-400">
+                                      ({res.percentOfRatedCv}% Cv)
+                                    </span>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-500">—</span>
+                                )}
+                              </td>
+                            );
+                          })}
+                        </tr>
+                      </tbody>
+                    </table>
+                  );
+                })()}
               </div>
             </div>
 
