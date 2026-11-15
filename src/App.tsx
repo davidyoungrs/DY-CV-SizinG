@@ -8,6 +8,7 @@ import {
   Table,
   Download,
   FileCode,
+  FileText,
   Printer,
   CheckCircle2,
   AlertTriangle,
@@ -4216,7 +4217,7 @@ export default function App() {
                   </p>
                 </div>
                 <button
-                  onClick={handleExportScheduleCSV}
+                  onClick={handleExportCSV}
                   className="px-3 py-1.5 rounded bg-[#0f8b8d] hover:bg-[#0d7678] text-white text-xs font-mono font-semibold transition flex items-center gap-1.5"
                   title="Export Schedule as CSV"
                 >
