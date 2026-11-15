@@ -3260,7 +3260,9 @@ export default function App() {
                           <span className="text-xs font-bold font-mono uppercase tracking-wide">
                             {cageSynthesis.saturationSeverity === 'SATURATED_UPSIZE_RECOMMENDED'
                               ? 'Cage Area Saturation / Upsize Recommended'
-                              : 'High Perforation Density Warning'}
+                              : cageSynthesis.saturationSeverity === 'TRIM_DEFICIT_INCREASE_HOLES'
+                              ? 'Drilled Trim Capacity Deficit — Extend Stroke or Adjust Spacing'
+                              : 'High Perforation Density / Margin Warning'}
                           </span>
                           <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/80 border border-current font-bold">
                             Perforation: {cageSynthesis.perforationRatioPct}% of Gross Cylinder
@@ -3642,7 +3644,8 @@ export default function App() {
                         className={
                           cageSynthesis.saturationSeverity === 'OPTIMAL'
                             ? 'text-[#8be0a8] font-bold'
-                            : cageSynthesis.saturationSeverity === 'HIGH_DENSITY'
+                            : cageSynthesis.saturationSeverity === 'HIGH_DENSITY' ||
+                              cageSynthesis.saturationSeverity === 'TRIM_DEFICIT_INCREASE_HOLES'
                             ? 'text-[#ffd77a] font-bold'
                             : 'text-[#ff8a80] font-bold'
                         }
@@ -3652,6 +3655,8 @@ export default function App() {
                           ? 'Optimal'
                           : cageSynthesis.saturationSeverity === 'HIGH_DENSITY'
                           ? 'High Density'
+                          : cageSynthesis.saturationSeverity === 'TRIM_DEFICIT_INCREASE_HOLES'
+                          ? 'Increase Hole Ø'
                           : 'Saturated - Upsize'})
                       </span>
                     </div>

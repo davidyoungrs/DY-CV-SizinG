@@ -449,8 +449,13 @@ export interface CageSynthesisAndStressResult {
   // Cage Cylinder Area Saturation & Valve Upsize Recommendation
   cageSurfaceArea_mm2: number; // Gross physical cylinder surface area: pi * D_ID * stroke_mm
   perforationRatioPct: number; // (totalOrificeArea_mm2 / cageSurfaceArea_mm2) * 100
-  isAreaSaturated: boolean; // True when requested trim Cv demands > 38% perforation or achieves < 75% target
-  saturationSeverity: 'OPTIMAL' | 'HIGH_DENSITY' | 'SATURATED_UPSIZE_RECOMMENDED';
+  isAreaSaturated: boolean; // True when process demand exceeds > 85% rated Cv or physical perforation > 35%
+  trimCapacityDeficit: boolean; // True when synthesized cage compositeRatedCv < maxProcessRequiredCv
+  saturationSeverity:
+    | 'OPTIMAL'
+    | 'HIGH_DENSITY'
+    | 'TRIM_DEFICIT_INCREASE_HOLES'
+    | 'SATURATED_UPSIZE_RECOMMENDED';
   saturationMessage: string;
   recommendedMinValveSize?: string;
 }
@@ -981,33 +986,51 @@ export function synthesizeDrilledCageAndStress(params: {
     : compositeRatedCv;
 
   let isAreaSaturated = false;
-  let saturationSeverity: 'OPTIMAL' | 'HIGH_DENSITY' | 'SATURATED_UPSIZE_RECOMMENDED' = 'OPTIMAL';
+  let trimCapacityDeficit = false;
+  let saturationSeverity:
+    | 'OPTIMAL'
+    | 'HIGH_DENSITY'
+    | 'TRIM_DEFICIT_INCREASE_HOLES'
+    | 'SATURATED_UPSIZE_RECOMMENDED' = 'OPTIMAL';
   let saturationMessage = `Cage open area density is optimal (${perforationRatioPct}% perforation). Sufficient ligament margin for pressure containment.`;
   let recommendedMinValveSize: string | undefined = undefined;
 
   if (effectiveProcessCv !== null && effectiveRatedCv > 0) {
     const processTravelDemandPct = (effectiveProcessCv / effectiveRatedCv) * 100;
+    const marginTargetCv = effectiveProcessCv * 1.15; // 15% dynamic control margin
+
     if (processTravelDemandPct > 85) {
       isAreaSaturated = true;
       saturationSeverity = 'SATURATED_UPSIZE_RECOMMENDED';
-      if (effectiveProcessCv > 400) {
+      // Recommend next nominal valve size where effectiveProcessCv <= 85% of rated Cv
+      const minRequiredRatedCv = effectiveProcessCv / 0.85;
+      if (minRequiredRatedCv > 414) {
         recommendedMinValveSize = 'DN200 (8") or larger';
-      } else if (effectiveProcessCv > 220) {
+      } else if (minRequiredRatedCv > 184) {
         recommendedMinValveSize = 'DN150 (6")';
-      } else if (effectiveProcessCv > 120) {
+      } else if (minRequiredRatedCv > 104) {
         recommendedMinValveSize = 'DN100 (4")';
-      } else if (effectiveProcessCv > 65) {
+      } else if (minRequiredRatedCv > 72) {
         recommendedMinValveSize = 'DN80 (3")';
+      } else if (minRequiredRatedCv > 46) {
+        recommendedMinValveSize = 'DN65 (2.5")';
       } else {
         recommendedMinValveSize = 'DN50 (2")';
       }
       saturationMessage = `Process Capacity Exceeded: Max operating condition requires ${effectiveProcessCv.toFixed(1)} Cv (${processTravelDemandPct.toFixed(1)}% of rated valve capacity ${effectiveRatedCv.toFixed(1)} Cv). Valve opening exceeds standard 85% control threshold. Upsize valve to ${recommendedMinValveSize} to maintain control margin.`;
+    } else if (compositeRatedCv < effectiveProcessCv) {
+      trimCapacityDeficit = true;
+      saturationSeverity = 'TRIM_DEFICIT_INCREASE_HOLES';
+      saturationMessage = `Drilled Trim Capacity Deficit: Valve body is adequately sized (${processTravelDemandPct.toFixed(1)}% of ${effectiveRatedCv.toFixed(1)} Cv rated), but the current ${totalHoles}-hole pattern (Base Ø${baseHoleDia_mm} mm, ${rows.length} rows) delivers ${compositeRatedCv.toFixed(1)} Cv vs. ${effectiveProcessCv.toFixed(1)} Cv max process demand. Enable Extended Stroke, relax Hole Spacing Rule (1.5d), or adjust Hole Ø / Rows to reach ≥ ${marginTargetCv.toFixed(1)} Cv before upsizing the valve body.`;
+    } else if (compositeRatedCv < marginTargetCv) {
+      saturationSeverity = 'HIGH_DENSITY';
+      saturationMessage = `Tight Dynamic Control Margin: Synthesized cage delivers ${compositeRatedCv.toFixed(1)} Cv against ${effectiveProcessCv.toFixed(1)} Cv max process demand (< 15% control margin; target ≥ ${marginTargetCv.toFixed(1)} Cv). Consider Extended Stroke or wider pitch allowance.`;
     } else if (processTravelDemandPct > 75 || perforationRatioPct > 28) {
       saturationSeverity = 'HIGH_DENSITY';
-      saturationMessage = `High Process Loading (${processTravelDemandPct.toFixed(1)}% of rated Cv, ${perforationRatioPct}% sleeve perforation). Adequate control margin with standard ligament spacing.`;
+      saturationMessage = `High Process Loading (${processTravelDemandPct.toFixed(1)}% of rated Cv, ${perforationRatioPct}% sleeve perforation). Synthesized cage delivers ${compositeRatedCv.toFixed(1)} Cv with adequate control margin.`;
     } else {
       saturationSeverity = 'OPTIMAL';
-      saturationMessage = `Valve Size & Cage Sizing Optimal: Process demand is ${effectiveProcessCv.toFixed(1)} Cv (${processTravelDemandPct.toFixed(1)}% of rated ${effectiveRatedCv.toFixed(1)} Cv) with safe ${perforationRatioPct}% sleeve perforation.`;
+      saturationMessage = `Valve Size & Cage Sizing Optimal: Process demand is ${effectiveProcessCv.toFixed(1)} Cv (${processTravelDemandPct.toFixed(1)}% of rated ${effectiveRatedCv.toFixed(1)} Cv). Synthesized cage delivers ${compositeRatedCv.toFixed(1)} Cv with safe ${perforationRatioPct}% sleeve perforation.`;
     }
   } else {
     // Fallback when process operating cases are not provided: check physical cage perforation ratio
@@ -1036,7 +1059,8 @@ export function synthesizeDrilledCageAndStress(params: {
     collapseSafetyFactor < 3.0 ||
     minPitchToDiaRatio < reqPitchRatio - 0.05 ||
     deadbandStrokePct > 0 ||
-    isAreaSaturated
+    isAreaSaturated ||
+    trimCapacityDeficit
   ) {
     structuralStatus = 'WARNING';
   }
@@ -1078,6 +1102,7 @@ export function synthesizeDrilledCageAndStress(params: {
     cageSurfaceArea_mm2,
     perforationRatioPct,
     isAreaSaturated,
+    trimCapacityDeficit,
     saturationSeverity,
     saturationMessage,
     recommendedMinValveSize,
