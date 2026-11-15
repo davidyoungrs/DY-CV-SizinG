@@ -1228,7 +1228,7 @@ export default function App() {
                           <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
                             {renderParamLabel(
                               'Phase',
-                              'Fluid state at the valve inlet: LIQUID (IEC 60534-2-1), GAS (compressible), STEAM (IAPWS saturation/superheat), or TWO_PHASE (Parcol separated/homogeneous flashing mixture).'
+                              'Fluid state at the valve inlet: LIQUID (IEC 60534-2-1), GAS (compressible), STEAM (IAPWS saturation/superheat), or TWO_PHASE (separated/homogeneous flashing mixture).'
                             )}
                           </th>
                           {operatingCases.map((c, idx) => (
@@ -1688,7 +1688,7 @@ export default function App() {
                             <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
                               {renderParamLabel(
                                 'Gas/Vapor Mass Frac fg',
-                                'Inlet gas/vapor mass quality fg (0 to 1) for TWO_PHASE sizing. Uses Parcol §4.3 separated model for fg < 0.05 or homogeneous Ve model for fg >= 0.05.',
+                                'Inlet gas/vapor mass quality fg (0 to 1) for TWO_PHASE sizing. Uses separated flow model for fg < 0.05 or homogeneous Ve model for fg >= 0.05.',
                                 'top'
                               )}
                             </th>
@@ -1841,7 +1841,7 @@ export default function App() {
                           <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
                             {renderParamLabel(
                               'ISA-RP75.23 σ / σ_mr & OSHA',
-                              'Service cavitation index σ vs ISA-RP75.23 max recommended damage limit σ_mr (with Parcol material hardness index), plus OSHA/NIOSH acoustic shift.',
+                              'Service cavitation index σ vs ISA-RP75.23 max recommended damage limit σ_mr (with material hardness resistance index), plus OSHA/NIOSH acoustic shift.',
                               'top'
                             )}
                           </th>
