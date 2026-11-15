@@ -337,6 +337,43 @@ export default function App() {
     return Math.max(...operatingCases.map((c) => c.T1_degC), finalProcessTemp_degC);
   }, [operatingCases, finalProcessTemp_degC]);
 
+  // Evaluate preliminary required Cv across active operating cases to size cage and check area saturation
+  const maxProcessRequiredCv = useMemo(() => {
+    const activeCases = operatingCases.filter((c) => c.enabled);
+    if (activeCases.length === 0) return 0;
+    const reqCvs = activeCases.map((point) => {
+      const res = evaluateOperatingCase({
+        point,
+        piping,
+        valveD_mm: correlatedValve.d_mm,
+        seatPort_mm: correlatedValve.d_port_mm,
+        ratedCv: correlatedValve.ratedCv,
+        FL: correlatedValve.FL,
+        Kc: correlatedValve.Kc,
+        xT: correlatedValve.xT,
+        Fd: correlatedValve.Fd,
+        stages: TRIM_STYLES[trimStyle].stages,
+        drilledHoleDia_mm: baseHoleDia_mm,
+        characteristicType: charConfig.type,
+        equalPctRangeability: charConfig.equalPctRangeability,
+        stroke_mm: correlatedValve.stroke_mm,
+        flowDirection,
+        cageMaterialId: cageMaterial,
+      });
+      return res.requiredCv || 0;
+    });
+    return Math.max(...reqCvs, 0);
+  }, [
+    operatingCases,
+    piping,
+    correlatedValve,
+    trimStyle,
+    baseHoleDia_mm,
+    charConfig,
+    flowDirection,
+    cageMaterial,
+  ]);
+
   const cageSynthesis = useMemo(
     () =>
       synthesizeDrilledCageAndStress({
@@ -359,6 +396,8 @@ export default function App() {
         operatingTemp_degC: maxOperatingTemp_degC,
         materialId: cageMaterial,
         requireNaceSourService,
+        ratedValveCv: correlatedValve.ratedCv,
+        maxProcessRequiredCv,
       }),
     [
       correlatedValve,
@@ -376,6 +415,7 @@ export default function App() {
       maxOperatingTemp_degC,
       cageMaterial,
       requireNaceSourService,
+      maxProcessRequiredCv,
     ]
   );
 
