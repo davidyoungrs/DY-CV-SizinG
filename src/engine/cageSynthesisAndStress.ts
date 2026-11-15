@@ -446,6 +446,13 @@ export interface CageSynthesisAndStressResult {
   structuralStatus: 'PASS' | 'WARNING' | 'CRITICAL';
   naceSourCompliant: boolean;
   tempCompliant: boolean;
+  // Cage Cylinder Area Saturation & Valve Upsize Recommendation
+  cageSurfaceArea_mm2: number; // Gross physical cylinder surface area: pi * D_ID * stroke_mm
+  perforationRatioPct: number; // (totalOrificeArea_mm2 / cageSurfaceArea_mm2) * 100
+  isAreaSaturated: boolean; // True when requested trim Cv demands > 38% perforation or achieves < 75% target
+  saturationSeverity: 'OPTIMAL' | 'HIGH_DENSITY' | 'SATURATED_UPSIZE_RECOMMENDED';
+  saturationMessage: string;
+  recommendedMinValveSize?: string;
 }
 
 /**
@@ -954,6 +961,44 @@ export function synthesizeDrilledCageAndStress(params: {
     !requireNaceSourService || matEval.spec.naceMR0175Compliant;
   const tempCompliant = matEval.tempCompliant;
 
+  // Cage Physical Surface Area & Perforation Saturation Analysis
+  const cageSurfaceArea_mm2 = Number((circumference_mm * H).toFixed(1));
+  const perforationRatioPct = Number(
+    ((cumulativeFullArea_mm2 / Math.max(1, circumference_mm * H)) * 100).toFixed(1)
+  );
+
+  // Theoretical open area demanded by targetTrimCv vs realistic physical cylinder capacity
+  // Drilled control valve cages are limited by ligament strength to ~32-38% open perforation
+  const targetOpenArea_mm2 = targetTrimCv / Math.max(0.01, 0.0589 * C_d);
+  const targetPerforationDemandPct = (targetOpenArea_mm2 / Math.max(1, circumference_mm * H)) * 100;
+  const cvShortfallRatio = synthesizedTrimCv / Math.max(0.1, targetTrimCv);
+
+  let isAreaSaturated = false;
+  let saturationSeverity: 'OPTIMAL' | 'HIGH_DENSITY' | 'SATURATED_UPSIZE_RECOMMENDED' = 'OPTIMAL';
+  let saturationMessage = `Cage open area density is optimal (${perforationRatioPct}% perforation). Sufficient ligament margin for pressure containment.`;
+  let recommendedMinValveSize: string | undefined = undefined;
+
+  if (targetPerforationDemandPct > 38 || cvShortfallRatio < 0.70) {
+    isAreaSaturated = true;
+    saturationSeverity = 'SATURATED_UPSIZE_RECOMMENDED';
+    // Estimate recommended valve size based on targetTrimCv
+    if (targetTrimCv > 400) {
+      recommendedMinValveSize = 'DN200 (8") or larger';
+    } else if (targetTrimCv > 220) {
+      recommendedMinValveSize = 'DN150 (6")';
+    } else if (targetTrimCv > 120) {
+      recommendedMinValveSize = 'DN100 (4")';
+    } else if (targetTrimCv > 65) {
+      recommendedMinValveSize = 'DN80 (3")';
+    } else {
+      recommendedMinValveSize = 'DN50 (2")';
+    }
+    saturationMessage = `Cage Area Saturated: Requested trim Cv (${targetTrimCv.toFixed(1)}) requires ${targetOpenArea_mm2.toFixed(0)} mm² open area (${targetPerforationDemandPct.toFixed(0)}% perforation on Ø${D_ID}×${H}mm cylinder), exceeding the physical ligament capacity (~35%). Cage delivered Cv is capped at ${synthesizedTrimCv.toFixed(1)} Cv. Upsize valve to ${recommendedMinValveSize} to maintain mechanical ligament integrity and control authority.`;
+  } else if (targetPerforationDemandPct > 28 || perforationRatioPct > 26) {
+    saturationSeverity = 'HIGH_DENSITY';
+    saturationMessage = `High Perforation Density (${perforationRatioPct}%): Near maximum allowable ligament density for ASME B16.34 / Sec VIII pressure boundary. Confirm shutoff ΔP hoop stress safety margins.`;
+  }
+
   let structuralStatus: 'PASS' | 'WARNING' | 'CRITICAL' = 'PASS';
   if (
     hoopStress_MPa > Sm_MPa ||
@@ -968,7 +1013,8 @@ export function synthesizeDrilledCageAndStress(params: {
     hoopStressUtilizationPct > 80 ||
     collapseSafetyFactor < 3.0 ||
     minPitchToDiaRatio < reqPitchRatio - 0.05 ||
-    deadbandStrokePct > 0
+    deadbandStrokePct > 0 ||
+    isAreaSaturated
   ) {
     structuralStatus = 'WARNING';
   }
@@ -1007,6 +1053,12 @@ export function synthesizeDrilledCageAndStress(params: {
     structuralStatus,
     naceSourCompliant,
     tempCompliant,
+    cageSurfaceArea_mm2,
+    perforationRatioPct,
+    isAreaSaturated,
+    saturationSeverity,
+    saturationMessage,
+    recommendedMinValveSize,
   };
 }
 

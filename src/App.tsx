@@ -3198,6 +3198,45 @@ export default function App() {
                 </div>
 
                 <div className="p-5 space-y-4">
+                  {/* Cage Area Saturation / Valve Upsize Recommended Diagnostic Alert */}
+                  {cageSynthesis.saturationSeverity !== 'OPTIMAL' && (
+                    <div
+                      className={`p-3.5 rounded-lg border flex items-start gap-3 ${
+                        cageSynthesis.saturationSeverity === 'SATURATED_UPSIZE_RECOMMENDED'
+                          ? 'bg-[#ffebee] border-[#ff8a80] text-[#b71c1c]'
+                          : 'bg-[#fff8e1] border-[#ffe082] text-[#e65100]'
+                      }`}
+                    >
+                      <AlertTriangle
+                        className={`w-5 h-5 shrink-0 mt-0.5 ${
+                          cageSynthesis.saturationSeverity === 'SATURATED_UPSIZE_RECOMMENDED'
+                            ? 'text-[#d32f2f]'
+                            : 'text-[#f57c00]'
+                        }`}
+                      />
+                      <div className="space-y-1">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-xs font-bold font-mono uppercase tracking-wide">
+                            {cageSynthesis.saturationSeverity === 'SATURATED_UPSIZE_RECOMMENDED'
+                              ? 'Cage Area Saturation / Upsize Recommended'
+                              : 'High Perforation Density Warning'}
+                          </span>
+                          <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-white/80 border border-current font-bold">
+                            Perforation: {cageSynthesis.perforationRatioPct}% of Gross Cylinder
+                          </span>
+                          {cageSynthesis.recommendedMinValveSize && (
+                            <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-[#13315c] text-white font-bold">
+                              Recommended Valve: ≥ {cageSynthesis.recommendedMinValveSize}
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-xs leading-relaxed font-sans">
+                          {cageSynthesis.saturationMessage}
+                        </p>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="space-y-3">
                     {/* Characterized Cage Profile / Trim Law */}
                     <div className="bg-[#edf1f5] border border-[#cfd8e3] rounded-lg p-3 space-y-2">
@@ -3554,6 +3593,25 @@ export default function App() {
                       >
                         {cageSynthesis.minPitchToDiaRatio}x (
                         {cageSynthesis.jetCoalescenceCompliant ? 'Anti-Coalescence OK' : 'Tight Pitch'})
+                      </span>
+                    </div>
+                    <div className="instrument-tile rounded px-2.5 py-1.5 flex justify-between">
+                      <span className="text-slate-400">Cage Area Saturation:</span>
+                      <span
+                        className={
+                          cageSynthesis.saturationSeverity === 'OPTIMAL'
+                            ? 'text-[#8be0a8] font-bold'
+                            : cageSynthesis.saturationSeverity === 'HIGH_DENSITY'
+                            ? 'text-[#ffd77a] font-bold'
+                            : 'text-[#ff8a80] font-bold'
+                        }
+                      >
+                        {cageSynthesis.perforationRatioPct}% Open (
+                        {cageSynthesis.saturationSeverity === 'OPTIMAL'
+                          ? 'Optimal'
+                          : cageSynthesis.saturationSeverity === 'HIGH_DENSITY'
+                          ? 'High Density'
+                          : 'Saturated - Upsize'})
                       </span>
                     </div>
                   </div>
