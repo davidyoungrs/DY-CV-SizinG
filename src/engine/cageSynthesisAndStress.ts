@@ -458,6 +458,10 @@ export interface CageSynthesisAndStressResult {
     | 'SATURATED_UPSIZE_RECOMMENDED';
   saturationMessage: string;
   recommendedMinValveSize?: string;
+  // CNC Drilling Manufacturability & Tooling Diagnostics
+  maxDrillAspectRatio: number;
+  distinctDrillSizes_mm: number[];
+  drillManufacturabilityStatus: 'PASS' | 'WARNING' | 'CRITICAL';
 }
 
 /**
@@ -578,7 +582,9 @@ export function synthesizeDrilledCageAndStress(params: {
           break;
         }
       }
-      d_k = Number(Math.max(1.5, baseHoleDia_mm * scale).toFixed(1));
+      const rawDia = Math.max(2.0, Math.min(18.0, baseHoleDia_mm * scale));
+      // Snap modulated diameters to standard 0.5 mm drill increments to limit CNC tool changes
+      d_k = Number(Math.max(2.0, Math.round(rawDia * 2) / 2).toFixed(1));
     }
     holeDias.push(d_k);
   }
@@ -1044,6 +1050,21 @@ export function synthesizeDrilledCageAndStress(params: {
     }
   }
 
+  const minHoleDia_mm =
+    rows.length > 0 ? Math.min(...rows.map((r) => r.holeDia_mm)) : baseHoleDia_mm;
+  const maxDrillAspectRatio = Number(
+    (t_wall / Math.max(0.5, minHoleDia_mm)).toFixed(2)
+  );
+  const distinctDrillSizes_mm = Array.from(
+    new Set(rows.map((r) => r.holeDia_mm))
+  ).sort((a, b) => a - b);
+  const drillManufacturabilityStatus: 'PASS' | 'WARNING' | 'CRITICAL' =
+    maxDrillAspectRatio <= 2.5
+      ? 'PASS'
+      : maxDrillAspectRatio <= 4.0
+      ? 'WARNING'
+      : 'CRITICAL';
+
   let structuralStatus: 'PASS' | 'WARNING' | 'CRITICAL' = 'PASS';
   if (
     hoopStress_MPa > Sm_MPa ||
@@ -1106,6 +1127,9 @@ export function synthesizeDrilledCageAndStress(params: {
     saturationSeverity,
     saturationMessage,
     recommendedMinValveSize,
+    maxDrillAspectRatio,
+    distinctDrillSizes_mm,
+    drillManufacturabilityStatus,
   };
 }
 
@@ -1207,20 +1231,38 @@ export function generate4AxisCageGCode(
   const rInner = result.cageID_mm / 2;
   const safeZ = Number((rOuter + 5.0).toFixed(2));
   const drillDepthZ = Number((rInner - 1.2).toFixed(2));
+  const drillSizes =
+    result.distinctDrillSizes_mm.length > 0
+      ? result.distinctDrillSizes_mm
+      : [result.meanHoleDia_mm];
+  const toolMap = new Map<number, string>();
+  drillSizes.forEach((dia, idx) => {
+    toolMap.set(dia, `T${String(idx + 1).padStart(2, '0')}`);
+  });
 
   const gcode: string[] = [
     `%`,
     `(DY-SIZE 4-AXIS CNC CAGE DRILLING PROGRAM - ZERO-DEADBAND OVERLAPPING ROWS)`,
-    `(CAGE ID: ${result.cageID_mm.toFixed(1)} MM | CAGE OD: ${result.cageOD_mm.toFixed(1)} MM | WALL: ${result.selectedWallThickness_mm.toFixed(1)} MM)`,
-    `(TOTAL HOLES: ${result.totalHoles} ACROSS ${result.rows.length} OVERLAPPING AXIAL ROWS | MEAN ROW OVERLAP: ${result.meanRowOverlapPct}% | DEADBAND: ${result.deadbandStrokePct}%)`,
+    `(CAGE ID: ${result.cageID_mm.toFixed(1)} MM | CAGE OD: ${result.cageOD_mm.toFixed(1)} MM | WALL: ${result.selectedWallThickness_mm.toFixed(1)} MM | MAX L/D: ${result.maxDrillAspectRatio})`,
+    `(TOTAL HOLES: ${result.totalHoles} ACROSS ${result.rows.length} OVERLAPPING AXIAL ROWS | DISTINCT DRILLS: ${drillSizes.map((d) => `Ø${d}`).join(', ')} MM)`,
     `G90 G21 G17 G40 G80`,
-    `T01 M06 (CARBIDE COOLANT-THRU DRILL Ø${result.meanHoleDia_mm} MM)`,
-    `S2800 M03`,
-    `M08 (HIGH-PRESSURE FLOOD COOLANT ON)`,
-    `G00 X0.000 Y0.000 Z${safeZ} A0.000`,
   ];
 
+  let activeTool = '';
   for (const row of result.rows) {
+    const toolCode = toolMap.get(row.holeDia_mm) || 'T01';
+    if (toolCode !== activeTool) {
+      if (activeTool !== '') {
+        gcode.push(`M09`, `M05`, `G00 Z${(rOuter + 25.0).toFixed(2)}`);
+      }
+      activeTool = toolCode;
+      gcode.push(
+        `${toolCode} M06 (CARBIDE COOLANT-THRU DRILL Ø${row.holeDia_mm} MM)`,
+        `S2800 M03`,
+        `M08 (HIGH-PRESSURE FLOOD COOLANT ON)`,
+        `G00 X0.000 Y0.000 Z${safeZ} A0.000`
+      );
+    }
     gcode.push(
       `(--- ROW ${row.rowIndex}: Z_CENTER=${row.zElevation_mm} MM [Z_BOT=${row.zBottom_mm}..Z_TOP=${row.zTop_mm}] | OVERLAP=${row.axialOverlapPct}% | ${row.holeCount} HOLES x Ø${row.holeDia_mm} MM ---)`
     );

@@ -113,7 +113,9 @@ export interface PlugForceBreakdown {
   packingFrictionForceC_N: number;
   sealAndBellowsForceD_N: number;
   totalRequiredThrust_N: number;
-  totalWithSafetyMargin_N: number; // 1.25x margin
+  totalWithSafetyMargin_N: number; // Governing 1.25x margin across seating & opening
+  seatingRequiredWithMargin_N: number;
+  openingRequiredWithMargin_N: number;
 }
 
 export interface ActuatorAndStemResult {
@@ -128,7 +130,14 @@ export interface ActuatorAndStemResult {
   requiredMinSupplyAir_bar_g: number;
   actuatorMarginUnbalancedPct: number;
   actuatorMarginBalancedPct: number;
+  openStrokeMarginUnbalancedPct: number;
+  openStrokeMarginBalancedPct: number;
+  seatingMarginUnbalancedPct: number;
+  seatingMarginBalancedPct: number;
   recommendedActuatorArea_cm2: number;
+  flowDirectionStabilityNote: string;
+  sealShutoffCompatibilityStatus: 'PASS' | 'WARNING' | 'CRITICAL';
+  sealShutoffCompatibilityNote: string;
   // Stem Structural Sizing (Tensile Root, Compressive Yield, Euler Buckling)
   selectedStemDia_mm: number;
   rootThreadDia_mm: number;
@@ -160,21 +169,25 @@ export function evaluateActuatorAndStemSizing(
 
   const dP_MPa = Math.max(0.05, input.shutoffDeltaP_bar * 0.1); // 1 bar = 0.1 N/mm2 (MPa)
   const P2_MPa = Math.max(0, input.downstreamShutoffP2_bar_g * 0.1);
+  // Upstream gauge pressure at shutoff = P2_g + dP_shutoff (never double-counted when P2_g = 0 atm)
   const P1_MPa = P2_MPa + dP_MPa;
 
-  // 1. Force A: Fluid Static Pressure Unbalance (N)
-  // Unbalanced Plug: Full port area A_seat exposed to dP + stem area rejection
-  const forceA_unbalanced_N = Math.round(
-    A_seat_mm2 * dP_MPa + A_stem_mm2 * P1_MPa
-  );
+  // 1. Force A: Fluid Static Pressure Unbalance (N), directional for FTO vs FTC
+  // FTO (Flow-To-Open): P1 below plug pushes UP against closing; bonnet sees P2 -> A_close = A_seat*dP + A_stem*P2
+  // FTC (Flow-To-Close): P1 above plug pushes DOWN (assists closing, opposes opening) -> A_open = max(0, A_seat*dP - A_stem*P1)
+  const forceA_unbalanced_N =
+    input.flowDirection === 'FTO'
+      ? Math.round(A_seat_mm2 * dP_MPa + A_stem_mm2 * P2_MPa)
+      : Math.round(Math.max(0, A_seat_mm2 * dP_MPa - A_stem_mm2 * P1_MPa));
 
   // Balanced Cage-Guided Plug: Equalizing holes balance top & bottom of plug head;
-  // only the small annular balance-seal step area (~4% of seat area) + stem area remains unbalanced!
+  // only the small annular balance-seal step area + stem pressure rejection remains unbalanced.
   const A_unbalancedAnnulus_mm2 =
     (Math.PI / 4) * (Math.pow(D_cage_mm, 2) - Math.pow(d_seat_mm, 2)) * 0.35;
-  const forceA_balanced_N = Math.round(
-    A_unbalancedAnnulus_mm2 * dP_MPa + A_stem_mm2 * P2_MPa
-  );
+  const forceA_balanced_N =
+    input.flowDirection === 'FTO'
+      ? Math.round(A_unbalancedAnnulus_mm2 * dP_MPa + A_stem_mm2 * P1_MPa)
+      : Math.round(A_unbalancedAnnulus_mm2 * dP_MPa + A_stem_mm2 * P2_MPa);
 
   // 2. Force B: ANSI/FCI 70-2 / IEC 60534-4 Seat Line Contact Load (N/mm of seat circumference)
   const seatCircumference_mm = Math.PI * d_seat_mm;
@@ -224,10 +237,25 @@ export function evaluateActuatorAndStemSizing(
   const forceD_unbalanced_N = Math.round(bellowsForce_N);
   const forceD_balanced_N = Math.round(bellowsForce_N + balanceRingDrag_N);
 
-  const totalUnbalanced_N =
-    forceA_unbalanced_N + forceB_seat_N + forceC_packing_N + forceD_unbalanced_N;
-  const totalBalanced_N =
-    forceA_balanced_N + forceB_seat_N + forceC_packing_N + forceD_balanced_N;
+  const unbalSeatingRaw_N =
+    input.flowDirection === 'FTO'
+      ? forceA_unbalanced_N + forceB_seat_N + forceC_packing_N + forceD_unbalanced_N
+      : forceB_seat_N + forceC_packing_N + forceD_unbalanced_N;
+  const unbalOpeningRaw_N =
+    input.flowDirection === 'FTO'
+      ? forceC_packing_N + forceD_unbalanced_N
+      : forceA_unbalanced_N + forceC_packing_N + forceD_unbalanced_N;
+  const totalUnbalanced_N = Math.max(unbalSeatingRaw_N, unbalOpeningRaw_N);
+
+  const balSeatingRaw_N =
+    input.flowDirection === 'FTO'
+      ? forceA_balanced_N + forceB_seat_N + forceC_packing_N + forceD_balanced_N
+      : forceB_seat_N + forceC_packing_N + forceD_balanced_N;
+  const balOpeningRaw_N =
+    input.flowDirection === 'FTO'
+      ? forceC_packing_N + forceD_balanced_N
+      : forceA_balanced_N + forceC_packing_N + forceD_balanced_N;
+  const totalBalanced_N = Math.max(balSeatingRaw_N, balOpeningRaw_N);
 
   const unbalanced: PlugForceBreakdown = {
     fluidUnbalanceForceA_N: forceA_unbalanced_N,
@@ -236,6 +264,8 @@ export function evaluateActuatorAndStemSizing(
     sealAndBellowsForceD_N: forceD_unbalanced_N,
     totalRequiredThrust_N: totalUnbalanced_N,
     totalWithSafetyMargin_N: Math.round(totalUnbalanced_N * 1.25),
+    seatingRequiredWithMargin_N: Math.round(unbalSeatingRaw_N * 1.25),
+    openingRequiredWithMargin_N: Math.round(unbalOpeningRaw_N * 1.25),
   };
 
   const balanced: PlugForceBreakdown = {
@@ -245,6 +275,8 @@ export function evaluateActuatorAndStemSizing(
     sealAndBellowsForceD_N: forceD_balanced_N,
     totalRequiredThrust_N: totalBalanced_N,
     totalWithSafetyMargin_N: Math.round(totalBalanced_N * 1.25),
+    seatingRequiredWithMargin_N: Math.round(balSeatingRaw_N * 1.25),
+    openingRequiredWithMargin_N: Math.round(balOpeningRaw_N * 1.25),
   };
 
   const thrustReductionPct = Number(
@@ -295,20 +327,81 @@ export function evaluateActuatorAndStemSizing(
     (P_bench_high + designThrust_N / (A_eff_cm2 * 10)).toFixed(2)
   );
 
-  const actuatorMarginUnbalancedPct = Number(
+  const seatingMarginUnbalancedPct = Number(
     (
-      ((availableActuatorSeatingThrust_N - unbalanced.totalWithSafetyMargin_N) /
-        Math.max(1, unbalanced.totalWithSafetyMargin_N)) *
+      ((availableActuatorSeatingThrust_N - unbalanced.seatingRequiredWithMargin_N) /
+        Math.max(1, unbalanced.seatingRequiredWithMargin_N)) *
       100
     ).toFixed(1)
   );
-  const actuatorMarginBalancedPct = Number(
+  const openStrokeMarginUnbalancedPct = Number(
     (
-      ((availableActuatorSeatingThrust_N - balanced.totalWithSafetyMargin_N) /
-        Math.max(1, balanced.totalWithSafetyMargin_N)) *
+      ((availableActuatorOpenThrust_N - unbalanced.openingRequiredWithMargin_N) /
+        Math.max(1, unbalanced.openingRequiredWithMargin_N)) *
       100
     ).toFixed(1)
   );
+  const seatingMarginBalancedPct = Number(
+    (
+      ((availableActuatorSeatingThrust_N - balanced.seatingRequiredWithMargin_N) /
+        Math.max(1, balanced.seatingRequiredWithMargin_N)) *
+      100
+    ).toFixed(1)
+  );
+  const openStrokeMarginBalancedPct = Number(
+    (
+      ((availableActuatorOpenThrust_N - balanced.openingRequiredWithMargin_N) /
+        Math.max(1, balanced.openingRequiredWithMargin_N)) *
+      100
+    ).toFixed(1)
+  );
+
+  const actuatorMarginUnbalancedPct = Math.min(
+    seatingMarginUnbalancedPct,
+    openStrokeMarginUnbalancedPct
+  );
+  const actuatorMarginBalancedPct = Math.min(
+    seatingMarginBalancedPct,
+    openStrokeMarginBalancedPct
+  );
+
+  const flowDirectionStabilityNote =
+    input.flowDirection === 'FTC'
+      ? 'FTC (Flow-To-Close): Upstream P1 assists closing and governs opening thrust (A + C + D). On unbalanced single-seated plugs, FTC risks dynamic bathtub-stopper slam below 15% lift; prefer Balanced Cage-Guided plug or FTO.'
+      : 'FTO (Flow-To-Open): Fluid unbalance opposes seating (governs closing thrust A + B + C + D) and provides positive hydraulic assist off the seat during opening.';
+
+  let sealShutoffCompatibilityStatus: 'PASS' | 'WARNING' | 'CRITICAL' = 'PASS';
+  let sealShutoffCompatibilityNote =
+    'Balanced plug seal type is compatible with selected ANSI/FCI 70-2 shutoff class and operating temperature.';
+
+  if (
+    input.balanceSealType === 'NONE_METAL_CLEARANCE' &&
+    (input.shutoffClass === 'CLASS_V' || input.shutoffClass === 'CLASS_VI')
+  ) {
+    sealShutoffCompatibilityStatus = 'CRITICAL';
+    sealShutoffCompatibilityNote =
+      'Incompatible Spec: Metal clearance seal leaks ~0.1–0.5% Cv across the cage annulus and cannot achieve ANSI/FCI 70-2 Class V or VI shutoff. Select Spring-Energized PTFE seal or Unbalanced single-seated trim.';
+  } else if (
+    input.balanceSealType === 'NONE_METAL_CLEARANCE' &&
+    input.shutoffClass === 'CLASS_IV'
+  ) {
+    sealShutoffCompatibilityStatus = 'WARNING';
+    sealShutoffCompatibilityNote =
+      'Metal clearance balance seal generally limits shutoff to Class II/III; verify annulus bypass clearance before guaranteeing Class IV.';
+  } else if (
+    input.balanceSealType === 'GRAPHITE_PISTON_RING' &&
+    (input.shutoffClass === 'CLASS_V' || input.shutoffClass === 'CLASS_VI')
+  ) {
+    sealShutoffCompatibilityStatus = 'WARNING';
+    sealShutoffCompatibilityNote =
+      'High-Temp Graphite Piston Ring seal typically limits balanced shutoff to Class III/IV; Class V/VI requires elastomeric/PTFE seal or unbalanced metal-seated trim.';
+  } else if (
+    input.balanceSealType === 'PTFE_SPRING_ENERGIZED' &&
+    input.operatingTemp_degC > 232
+  ) {
+    sealShutoffCompatibilityStatus = 'WARNING';
+    sealShutoffCompatibilityNote = `Operating temperature (${input.operatingTemp_degC}°C) exceeds 232 °C continuous limit for PTFE balance seal; consider High-Temp Graphite Ring (Class III/IV) or Unbalanced trim.`;
+  }
 
   const effectivePressureDelta_bar =
     input.failAction === 'FAIL_CLOSED_ATO' ? P_bench_low : P_supply - P_bench_high;
@@ -405,7 +498,14 @@ export function evaluateActuatorAndStemSizing(
     requiredMinSupplyAir_bar_g,
     actuatorMarginUnbalancedPct,
     actuatorMarginBalancedPct,
+    openStrokeMarginUnbalancedPct,
+    openStrokeMarginBalancedPct,
+    seatingMarginUnbalancedPct,
+    seatingMarginBalancedPct,
     recommendedActuatorArea_cm2,
+    flowDirectionStabilityNote,
+    sealShutoffCompatibilityStatus,
+    sealShutoffCompatibilityNote,
     selectedStemDia_mm: d_stem_mm,
     rootThreadDia_mm,
     directTensileStress_MPa,

@@ -99,6 +99,7 @@ export interface TransientThermalInput {
   rampRate_degC_per_min: number; // Fluid warmup/cooldown rate (0 = instant step shock)
   convectiveHeatTransferCoeff_W_m2K: number; // h_conv (~2500 liquid/steam, ~400 gas)
   requireLethalBellowsSeal: boolean;
+  cageHasHardFacing?: boolean;
 }
 
 export interface ThermalTimeStepPoint {
@@ -137,6 +138,8 @@ export interface TransientThermalResult {
   maxSafeRampRate_degC_per_min: number;
   radialBindingRisk: 'PASS' | 'WARNING' | 'CRITICAL';
   axialCrushRisk: 'PASS' | 'WARNING' | 'CRITICAL';
+  gallingRisk: 'PASS' | 'WARNING' | 'CRITICAL';
+  gallingRationale: string;
   bonnetAdvisor: BonnetRecommendation;
 }
 
@@ -293,6 +296,28 @@ export function simulateTransientThermalBinding(
   // Bonnet Style & Packing Box Thermal Isolation Advisor (Emerson Ch. 3 & 6 / Skousen Ch. 2 & 9)
   const T_max = Math.max(T0, T_final);
   const T_min = Math.min(T0, T_final);
+
+  // Trim Sliding Galling & Hardness Differential Check
+  let gallingRisk: 'PASS' | 'WARNING' | 'CRITICAL' = 'PASS';
+  let gallingRationale =
+    'Dissimilar plug/cage alloy pair or hard-faced guide surface provides reliable anti-galling resistance.';
+
+  if (input.plugAlloy === 'CF8M_316SS' && input.cageAlloy === 'CF8M_316SS' && !input.cageHasHardFacing) {
+    gallingRisk = 'CRITICAL';
+    gallingRationale =
+      'Self-mated austenitic 316SS/CF8M plug running in un-hardfaced 316SS cage is highly prone to adhesive galling and seizure. Specify Stellite 6 plug overlay, Cr-HF cage bore, or martensitic 410/17-4PH cage.';
+  } else if (
+    input.plugAlloy === input.cageAlloy &&
+    (T_max >= 250 || input.plugAlloy === 'HASTELLOY_C276') &&
+    !input.cageHasHardFacing
+  ) {
+    gallingRisk = 'WARNING';
+    gallingRationale = `Same-alloy plug & cage pair (${plugSpec.name}) at ${T_max}°C without hard-facing: ensure ≥5–10 HRC hardness differential (e.g., Stellite 6 guide lands or nitriding) to prevent scoring.`;
+  } else if (input.cageHasHardFacing) {
+    gallingRisk = 'PASS';
+    gallingRationale = `Hard-faced cage bore / CoCr-A trim provides high hardness differential against ${plugSpec.name} plug up to ${T_max}°C.`;
+  }
+
   let bonnetAdvisor: BonnetRecommendation;
 
   if (input.requireLethalBellowsSeal) {
@@ -350,6 +375,8 @@ export function simulateTransientThermalBinding(
     maxSafeRampRate_degC_per_min,
     radialBindingRisk,
     axialCrushRisk,
+    gallingRisk,
+    gallingRationale,
     bonnetAdvisor,
   };
 }

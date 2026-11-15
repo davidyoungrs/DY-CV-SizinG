@@ -1138,6 +1138,8 @@ export interface BackpressureOrificeCaseResult {
   sharedValveDeltaP_bar: number;
   originalSigma: number;
   sharedSigma: number;
+  orificeSigma: number;
+  orificeChokedWarning: boolean;
   sharedCavitationResolved: boolean;
   sharedNoiseReduction_dBA: number;
 }
@@ -1226,6 +1228,14 @@ export function evaluateBackpressureOrificeSharing(params: {
 
     const originalSigma = (c.P1_bar_a - c.Pv_bar_a) / Math.max(0.01, totalDp);
     const sharedSigma = (c.P1_bar_a - c.Pv_bar_a) / Math.max(0.01, sharedValveDeltaP_bar);
+    const orificeSigma = Number(
+      ((c.P2_bar_a - c.Pv_bar_a) / Math.max(0.01, orificeDeltaP_bar)).toFixed(2)
+    );
+    const orificeChokedWarning =
+      c.fluidPhase === 'LIQUID'
+        ? orificeDeltaP_bar >= 0.72 * (midPressurePmid_bar_a - 0.9 * c.Pv_bar_a) ||
+          c.P2_bar_a <= c.Pv_bar_a
+        : orificeDeltaP_bar / Math.max(0.1, midPressurePmid_bar_a) >= 0.5;
     const sharedCavitationResolved =
       c.fluidPhase === 'LIQUID' ? midPressurePmid_bar_a > c.Pv_bar_a && sharedSigma >= 1.3 : true;
 
@@ -1244,6 +1254,8 @@ export function evaluateBackpressureOrificeSharing(params: {
       sharedValveDeltaP_bar: Number(sharedValveDeltaP_bar.toFixed(2)),
       originalSigma: Number(originalSigma.toFixed(2)),
       sharedSigma: Number(sharedSigma.toFixed(2)),
+      orificeSigma,
+      orificeChokedWarning,
       sharedCavitationResolved,
       sharedNoiseReduction_dBA: Number(sharedNoiseReduction_dBA.toFixed(1)),
     };

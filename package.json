@@ -1,7 +1,7 @@
 {
   "name": "dy-size-control-valve-cae",
   "private": true,
-  "version": "1.0.0",
+  "version": "1.0.4",
   "description": "Manufacturer-Agnostic Multi-Condition Control Valve Sizing, Installed Characteristic Simulation, Transient Thermal Binding, Actuator/Stem Sizing & Drilled Cage Trim CAD/CAM Suite",
   "type": "module",
   "scripts": {

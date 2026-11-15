@@ -21,9 +21,11 @@ import {
   Wrench,
   Info,
   ChevronDown,
+  ChevronUp,
   Upload,
   Save,
   Globe,
+  Link2,
 } from 'lucide-react';
 
 import {
@@ -108,6 +110,10 @@ import {
   evaluateActuatorAndStemSizing,
 } from './engine/actuatorAndStemEngine';
 
+// Application revision displayed in the header title bar & browser tab.
+// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.5) unless minor/major escalation is requested.
+export const APP_VERSION = '1.0.4';
+
 type ActiveTabId =
   | 'PROCESS_SIZING'
   | 'CHARACTERISTICS'
@@ -115,6 +121,45 @@ type ActiveTabId =
   | 'TRANSIENT_THERMAL'
   | 'ACTUATOR_STEM'
   | 'MASTER_SCHEDULE';
+
+interface AsmePipeScheduleOption {
+  id: string;
+  label: string;
+  dn: number;
+  pipeID_mm: number;
+  wall_mm: number;
+}
+
+const ASME_PIPE_SCHEDULES: AsmePipeScheduleOption[] = [
+  { id: '1_SCH40', label: '1" (DN25) Sch 40 / Std (ID 26.6 mm)', dn: 25, pipeID_mm: 26.6, wall_mm: 3.38 },
+  { id: '1_SCH80', label: '1" (DN25) Sch 80 / XS (ID 24.3 mm)', dn: 25, pipeID_mm: 24.3, wall_mm: 4.55 },
+  { id: '1_5_SCH40', label: '1.5" (DN40) Sch 40 / Std (ID 40.9 mm)', dn: 40, pipeID_mm: 40.9, wall_mm: 3.68 },
+  { id: '1_5_SCH80', label: '1.5" (DN40) Sch 80 / XS (ID 38.1 mm)', dn: 40, pipeID_mm: 38.1, wall_mm: 5.08 },
+  { id: '2_SCH40', label: '2" (DN50) Sch 40 / Std (ID 52.5 mm)', dn: 50, pipeID_mm: 52.5, wall_mm: 3.91 },
+  { id: '2_SCH80', label: '2" (DN50) Sch 80 / XS (ID 49.2 mm)', dn: 50, pipeID_mm: 49.2, wall_mm: 5.54 },
+  { id: '3_SCH40', label: '3" (DN80) Sch 40 / Std (ID 77.9 mm)', dn: 80, pipeID_mm: 77.9, wall_mm: 5.49 },
+  { id: '3_SCH80', label: '3" (DN80) Sch 80 / XS (ID 73.7 mm)', dn: 80, pipeID_mm: 73.7, wall_mm: 7.62 },
+  { id: '4_SCH40', label: '4" (DN100) Sch 40 / Std (ID 102.3 mm)', dn: 100, pipeID_mm: 102.3, wall_mm: 6.02 },
+  { id: '4_SCH80', label: '4" (DN100) Sch 80 / XS (ID 97.2 mm)', dn: 100, pipeID_mm: 97.2, wall_mm: 8.56 },
+  { id: '6_SCH40', label: '6" (DN150) Sch 40 / Std (ID 154.1 mm)', dn: 150, pipeID_mm: 154.1, wall_mm: 7.11 },
+  { id: '6_SCH80', label: '6" (DN150) Sch 80 / XS (ID 146.3 mm)', dn: 150, pipeID_mm: 146.3, wall_mm: 10.97 },
+  { id: '8_SCH40', label: '8" (DN200) Sch 40 / Std (ID 202.7 mm)', dn: 200, pipeID_mm: 202.7, wall_mm: 8.18 },
+  { id: '8_SCH80', label: '8" (DN200) Sch 80 / XS (ID 193.7 mm)', dn: 200, pipeID_mm: 193.7, wall_mm: 12.70 },
+  { id: '10_SCH40', label: '10" (DN250) Sch 40 / Std (ID 254.5 mm)', dn: 250, pipeID_mm: 254.5, wall_mm: 9.27 },
+  { id: '10_SCH80', label: '10" (DN250) Sch 80 (ID 242.9 mm)', dn: 250, pipeID_mm: 242.9, wall_mm: 15.09 },
+  { id: '12_STD', label: '12" (DN300) Std (ID 304.8 mm)', dn: 300, pipeID_mm: 304.8, wall_mm: 9.53 },
+  { id: '12_SCH40', label: '12" (DN300) Sch 40 (ID 303.2 mm)', dn: 300, pipeID_mm: 303.2, wall_mm: 10.31 },
+  { id: '12_SCH80', label: '12" (DN300) Sch 80 (ID 288.9 mm)', dn: 300, pipeID_mm: 288.9, wall_mm: 17.48 },
+  { id: '16_STD', label: '16" (DN400) Std (ID 387.4 mm)', dn: 400, pipeID_mm: 387.4, wall_mm: 9.53 },
+  { id: '16_SCH40', label: '16" (DN400) Sch 40 / XS (ID 381.0 mm)', dn: 400, pipeID_mm: 381.0, wall_mm: 12.70 },
+  { id: '16_SCH80', label: '16" (DN400) Sch 80 (ID 363.5 mm)', dn: 400, pipeID_mm: 363.5, wall_mm: 21.44 },
+  { id: '20_STD', label: '20" (DN500) Std / Sch 20 (ID 488.9 mm)', dn: 500, pipeID_mm: 488.9, wall_mm: 9.53 },
+  { id: '20_SCH40', label: '20" (DN500) Sch 40 (ID 477.8 mm)', dn: 500, pipeID_mm: 477.8, wall_mm: 15.09 },
+  { id: '20_SCH80', label: '20" (DN500) Sch 80 (ID 455.6 mm)', dn: 500, pipeID_mm: 455.6, wall_mm: 26.19 },
+  { id: '24_STD', label: '24" (DN600) Std / Sch 20 (ID 590.5 mm)', dn: 600, pipeID_mm: 590.5, wall_mm: 9.53 },
+  { id: '24_SCH40', label: '24" (DN600) Sch 40 (ID 574.6 mm)', dn: 600, pipeID_mm: 574.6, wall_mm: 17.48 },
+  { id: '24_SCH80', label: '24" (DN600) Sch 80 (ID 547.7 mm)', dn: 600, pipeID_mm: 547.7, wall_mm: 30.96 },
+];
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTabId>('PROCESS_SIZING');
@@ -139,6 +184,11 @@ export default function App() {
     return () => document.removeEventListener('mousedown', handleOutsideClick);
   }, []);
 
+  // Keep browser tab title synchronized with APP_VERSION
+  useEffect(() => {
+    document.title = `DY-SIZE (Rev ${APP_VERSION}) // Control Valve Sizing & Drilled Cage CAE Suite (IEC 60534 / ASME B16.34)`;
+  }, []);
+
   // When general unit system changes, switch default row units accordingly
   const handleUnitSystemChange = (newSystem: GeneralUnitSystem) => {
     setUnitSystem(newSystem);
@@ -158,6 +208,21 @@ export default function App() {
   const [customRatedCvOverride, setCustomRatedCvOverride] = useState<number | null>(null);
   const [enableBackpressureOrifice, setEnableBackpressureOrifice] = useState<boolean>(false);
   const [orificeDeltaPSharePct, setOrificeDeltaPSharePct] = useState<number>(45);
+
+  // Workbench UI, Project Metadata & Cross-Tab Sync State
+  const [showHardwareKpis, setShowHardwareKpis] = useState<boolean>(true);
+  const [showCandidateComparison, setShowCandidateComparison] = useState<boolean>(false);
+  const [showGCodePreview, setShowGCodePreview] = useState<boolean>(false);
+  const [pipeScheduleId, setPipeScheduleId] = useState<string>('4_SCH40');
+  const [autoSyncPv, setAutoSyncPv] = useState<boolean>(true);
+  const [syncThermalTempWithProcess, setSyncThermalTempWithProcess] = useState<boolean>(true);
+  const [customShutoffDeltaP_bar, setCustomShutoffDeltaP_bar] = useState<number | null>(null);
+  const [projectMeta, setProjectMeta] = useState({
+    tagNumber: 'FV-1001A',
+    serviceDescription: 'HP Boiler Feedwater Letdown',
+    lineNumber: '4"-BFW-104-CL300',
+    projectRev: 'Rev A',
+  });
 
   // 2. Piping & Multi-Condition Process State
   const [piping, setPiping] = useState<PipingConfiguration>({
@@ -329,133 +394,7 @@ export default function App() {
     ]
   );
 
-  const maxShutoffDeltaP_bar = useMemo(() => {
-    const maxP1 = Math.max(...operatingCases.map((c) => c.P1_bar_a), 25);
-    return Number(maxP1.toFixed(1));
-  }, [operatingCases]);
-
-  const maxOperatingTemp_degC = useMemo(() => {
-    return Math.max(...operatingCases.map((c) => c.T1_degC), finalProcessTemp_degC);
-  }, [operatingCases, finalProcessTemp_degC]);
-
-  // Evaluate preliminary required Cv across active operating cases to size cage and check area saturation
-  const maxProcessRequiredCv = useMemo(() => {
-    const activeCases = operatingCases.filter((c) => c.enabled);
-    if (activeCases.length === 0) return 0;
-    const reqCvs = activeCases.map((point) => {
-      const res = evaluateOperatingCase({
-        point,
-        piping,
-        valveD_mm: correlatedValve.d_mm,
-        seatPort_mm: correlatedValve.d_port_mm,
-        ratedCv: correlatedValve.ratedCv,
-        FL: correlatedValve.FL,
-        Kc: correlatedValve.Kc,
-        xT: correlatedValve.xT,
-        Fd: correlatedValve.Fd,
-        stages: TRIM_STYLES[trimStyle].stages,
-        drilledHoleDia_mm: baseHoleDia_mm,
-        characteristicType: charConfig.type,
-        equalPctRangeability: charConfig.equalPctRangeability,
-        stroke_mm: correlatedValve.stroke_mm,
-        flowDirection,
-        cageMaterialId: cageMaterial,
-      });
-      return res.requiredCv || 0;
-    });
-    return Math.max(...reqCvs, 0);
-  }, [
-    operatingCases,
-    piping,
-    correlatedValve,
-    trimStyle,
-    baseHoleDia_mm,
-    charConfig,
-    flowDirection,
-    cageMaterial,
-  ]);
-
-  const cageSynthesis = useMemo(
-    () =>
-      synthesizeDrilledCageAndStress({
-        cageID_mm: correlatedValve.d_port_mm,
-        stroke_mm: correlatedValve.stroke_mm,
-        targetTrimCv: correlatedValve.cvTrimComponent,
-        cvSeatComponent: correlatedValve.cvSeatComponent,
-        cvBodyComponent: correlatedValve.cvBodyComponent,
-        orificeDischargeCoeff: TRIM_STYLES[trimStyle].orificeDischargeCoeff,
-        characteristicConfig: charConfig,
-        numRows,
-        baseHoleDia_mm,
-        modulateHoleDiameter,
-        enforceZeroDeadbandOverlap,
-        targetRowOverlapPct,
-        holeSpacingRule,
-        selectedWallThickness_mm,
-        erosionAllowance_mm,
-        shutoffDeltaP_bar: maxShutoffDeltaP_bar,
-        operatingTemp_degC: maxOperatingTemp_degC,
-        materialId: cageMaterial,
-        requireNaceSourService,
-        ratedValveCv: correlatedValve.ratedCv,
-        maxProcessRequiredCv,
-      }),
-    [
-      correlatedValve,
-      trimStyle,
-      charConfig,
-      numRows,
-      baseHoleDia_mm,
-      modulateHoleDiameter,
-      enforceZeroDeadbandOverlap,
-      targetRowOverlapPct,
-      holeSpacingRule,
-      selectedWallThickness_mm,
-      erosionAllowance_mm,
-      maxShutoffDeltaP_bar,
-      maxOperatingTemp_degC,
-      cageMaterial,
-      requireNaceSourService,
-      maxProcessRequiredCv,
-    ]
-  );
-
-  const caseResults = useMemo(
-    () =>
-      operatingCases
-        .filter((c) => c.enabled)
-        .map((point) =>
-          evaluateOperatingCase({
-            point,
-            piping,
-            valveD_mm: correlatedValve.d_mm,
-            seatPort_mm: correlatedValve.d_port_mm,
-            ratedCv: correlatedValve.ratedCv,
-            FL: correlatedValve.FL,
-            Kc: correlatedValve.Kc,
-            xT: correlatedValve.xT,
-            Fd: cageSynthesis.styleModifierFd,
-            stages: TRIM_STYLES[trimStyle].stages,
-            drilledHoleDia_mm: cageSynthesis.meanHoleDia_mm,
-            characteristicType: charConfig.type,
-            equalPctRangeability: charConfig.equalPctRangeability,
-            stroke_mm: correlatedValve.stroke_mm,
-            flowDirection,
-            cageMaterialId: cageMaterial,
-          })
-        ),
-    [
-      operatingCases,
-      piping,
-      correlatedValve,
-      cageSynthesis,
-      trimStyle,
-      charConfig,
-      flowDirection,
-      cageMaterial,
-    ]
-  );
-
+  // Compute downstream backpressure orifice pressure sharing FIRST so P_mid (P2*) feeds active sizing
   const backpressureOrificeResult = useMemo(
     () =>
       enableBackpressureOrifice
@@ -473,44 +412,236 @@ export default function App() {
     ]
   );
 
-  // Automated Valve Size & Pressure Rating Recommender based on all process conditions (60–90% Max Cv Rule)
+  // Closed-loop operating cases: when orifice sharing is active, substitute valve outlet P2 with P_mid
+  const effectiveOperatingCases = useMemo(() => {
+    if (!enableBackpressureOrifice || !backpressureOrificeResult) return operatingCases;
+    return operatingCases.map((c) => {
+      const share = backpressureOrificeResult.caseShares.find((s) => s.id === c.id);
+      return share ? { ...c, P2_bar_a: share.midPressurePmid_bar_a } : c;
+    });
+  }, [operatingCases, enableBackpressureOrifice, backpressureOrificeResult]);
+
+  // Shutoff ΔP against atmospheric downstream (0 bar g = 1.013 bar a) unless overridden by user
+  const maxUpstreamP1_bar_a = useMemo(
+    () => Math.max(...operatingCases.map((c) => c.P1_bar_a), 26.013),
+    [operatingCases]
+  );
+
+  const defaultShutoffDeltaP_bar = useMemo(
+    () => Math.max(1, Number((maxUpstreamP1_bar_a - 1.013).toFixed(1))),
+    [maxUpstreamP1_bar_a]
+  );
+
+  const effectiveShutoffDeltaP_bar = useMemo(
+    () =>
+      customShutoffDeltaP_bar !== null
+        ? Math.max(0.5, customShutoffDeltaP_bar)
+        : defaultShutoffDeltaP_bar,
+    [customShutoffDeltaP_bar, defaultShutoffDeltaP_bar]
+  );
+
+  const maxShutoffDeltaP_bar = effectiveShutoffDeltaP_bar;
+
+  // Auto-derive Valve Authority Pv = ΔP_min / ΔP_max across enabled operating cases
+  const derivedSystemPv = useMemo(() => {
+    const active = effectiveOperatingCases.filter((c) => c.enabled && c.P1_bar_a > c.P2_bar_a);
+    if (active.length === 0) return charConfig.valveAuthorityPv;
+    const dps = active.map((c) => c.P1_bar_a - c.P2_bar_a);
+    const minDp = Math.min(...dps);
+    const maxDp = Math.max(...dps);
+    if (maxDp <= 0 || Math.abs(maxDp - minDp) < 0.05) {
+      return charConfig.valveAuthorityPv;
+    }
+    return Number(Math.min(0.95, Math.max(0.08, minDp / maxDp)).toFixed(2));
+  }, [effectiveOperatingCases, charConfig.valveAuthorityPv]);
+
+  const effectiveCharConfig = useMemo<CharacteristicConfig>(
+    () => ({
+      ...charConfig,
+      valveAuthorityPv: autoSyncPv ? derivedSystemPv : charConfig.valveAuthorityPv,
+    }),
+    [charConfig, autoSyncPv, derivedSystemPv]
+  );
+
+  // Sync thermal shock final temperature with extreme process temperature (handles both hot & cryogenic cases)
+  const processExtremeTemp_degC = useMemo(() => {
+    const active = operatingCases.filter((c) => c.enabled);
+    if (active.length === 0) return finalProcessTemp_degC;
+    let extreme = active[0].T1_degC;
+    for (const c of active) {
+      if (Math.abs(c.T1_degC - 20) > Math.abs(extreme - 20)) {
+        extreme = c.T1_degC;
+      }
+    }
+    return Number(extreme.toFixed(1));
+  }, [operatingCases, finalProcessTemp_degC]);
+
+  const effectiveThermalTargetTemp_degC = syncThermalTempWithProcess
+    ? processExtremeTemp_degC
+    : finalProcessTemp_degC;
+
+  const maxOperatingTemp_degC = useMemo(() => {
+    return Math.max(...operatingCases.map((c) => c.T1_degC), effectiveThermalTargetTemp_degC);
+  }, [operatingCases, effectiveThermalTargetTemp_degC]);
+
+  // Evaluate preliminary required Cv across active operating cases to size cage and check area saturation
+  const maxProcessRequiredCv = useMemo(() => {
+    const activeCases = effectiveOperatingCases.filter((c) => c.enabled);
+    if (activeCases.length === 0) return 0;
+    const reqCvs = activeCases.map((point) => {
+      const res = evaluateOperatingCase({
+        point,
+        piping,
+        valveD_mm: correlatedValve.d_mm,
+        seatPort_mm: correlatedValve.d_port_mm,
+        ratedCv: correlatedValve.ratedCv,
+        FL: correlatedValve.FL,
+        Kc: correlatedValve.Kc,
+        xT: correlatedValve.xT,
+        Fd: correlatedValve.Fd,
+        stages: TRIM_STYLES[trimStyle].stages,
+        drilledHoleDia_mm: baseHoleDia_mm,
+        characteristicType: effectiveCharConfig.type,
+        equalPctRangeability: effectiveCharConfig.equalPctRangeability,
+        stroke_mm: correlatedValve.stroke_mm,
+        flowDirection,
+        cageMaterialId: cageMaterial,
+      });
+      return res.requiredCv || 0;
+    });
+    return Math.max(...reqCvs, 0);
+  }, [
+    effectiveOperatingCases,
+    piping,
+    correlatedValve,
+    trimStyle,
+    baseHoleDia_mm,
+    effectiveCharConfig,
+    flowDirection,
+    cageMaterial,
+  ]);
+
+  const cageSynthesis = useMemo(
+    () =>
+      synthesizeDrilledCageAndStress({
+        cageID_mm: correlatedValve.d_port_mm,
+        stroke_mm: correlatedValve.stroke_mm,
+        targetTrimCv: correlatedValve.cvTrimComponent,
+        cvSeatComponent: correlatedValve.cvSeatComponent,
+        cvBodyComponent: correlatedValve.cvBodyComponent,
+        orificeDischargeCoeff: TRIM_STYLES[trimStyle].orificeDischargeCoeff,
+        characteristicConfig: effectiveCharConfig,
+        numRows,
+        baseHoleDia_mm,
+        modulateHoleDiameter,
+        enforceZeroDeadbandOverlap,
+        targetRowOverlapPct,
+        holeSpacingRule,
+        selectedWallThickness_mm,
+        erosionAllowance_mm,
+        shutoffDeltaP_bar: effectiveShutoffDeltaP_bar,
+        operatingTemp_degC: maxOperatingTemp_degC,
+        materialId: cageMaterial,
+        requireNaceSourService,
+        ratedValveCv: correlatedValve.ratedCv,
+        maxProcessRequiredCv,
+      }),
+    [
+      correlatedValve,
+      trimStyle,
+      effectiveCharConfig,
+      numRows,
+      baseHoleDia_mm,
+      modulateHoleDiameter,
+      enforceZeroDeadbandOverlap,
+      targetRowOverlapPct,
+      holeSpacingRule,
+      selectedWallThickness_mm,
+      erosionAllowance_mm,
+      effectiveShutoffDeltaP_bar,
+      maxOperatingTemp_degC,
+      cageMaterial,
+      requireNaceSourService,
+      maxProcessRequiredCv,
+    ]
+  );
+
+  const caseResults = useMemo(
+    () =>
+      effectiveOperatingCases
+        .filter((c) => c.enabled)
+        .map((point) =>
+          evaluateOperatingCase({
+            point,
+            piping,
+            valveD_mm: correlatedValve.d_mm,
+            seatPort_mm: correlatedValve.d_port_mm,
+            ratedCv: correlatedValve.ratedCv,
+            FL: correlatedValve.FL,
+            Kc: correlatedValve.Kc,
+            xT: correlatedValve.xT,
+            Fd: cageSynthesis.styleModifierFd,
+            stages: TRIM_STYLES[trimStyle].stages,
+            drilledHoleDia_mm: cageSynthesis.meanHoleDia_mm,
+            characteristicType: effectiveCharConfig.type,
+            equalPctRangeability: effectiveCharConfig.equalPctRangeability,
+            stroke_mm: correlatedValve.stroke_mm,
+            flowDirection,
+            cageMaterialId: cageMaterial,
+          })
+        ),
+    [
+      effectiveOperatingCases,
+      piping,
+      correlatedValve,
+      cageSynthesis,
+      trimStyle,
+      effectiveCharConfig,
+      flowDirection,
+      cageMaterial,
+    ]
+  );
+
+  // Automated Valve Size & Pressure Rating Recommender based on active process conditions (60–90% Max Cv Rule)
   const valveRecommendation = useMemo(
     () =>
       recommendValveSizeAndRating({
-        cases: operatingCases,
+        cases: effectiveOperatingCases,
         piping,
         trimStyle,
         bodyStyle,
         flowDirection,
         reducedTrimFactor,
         useExtendedStroke,
-        characteristicType: charConfig.type,
-        equalPctRangeability: charConfig.equalPctRangeability,
+        characteristicType: effectiveCharConfig.type,
+        equalPctRangeability: effectiveCharConfig.equalPctRangeability,
       }),
     [
-      operatingCases,
+      effectiveOperatingCases,
       piping,
       trimStyle,
       bodyStyle,
       flowDirection,
       reducedTrimFactor,
       useExtendedStroke,
-      charConfig.type,
-      charConfig.equalPctRangeability,
+      effectiveCharConfig.type,
+      effectiveCharConfig.equalPctRangeability,
     ]
   );
 
   const charSimulation = useMemo(() => {
     const activeCvs = caseResults.map((r) => r.requiredCv).filter((v) => v > 0);
     return simulateCharacteristicCurves({
-      config: charConfig,
+      config: effectiveCharConfig,
       ratedCv: correlatedValve.ratedCv,
       stroke_mm: correlatedValve.stroke_mm,
-      maxSystemDeltaP_bar: maxShutoffDeltaP_bar,
+      maxSystemDeltaP_bar: effectiveShutoffDeltaP_bar,
       maxOperatingRequiredCv: activeCvs.length > 0 ? Math.max(...activeCvs) : undefined,
       minOperatingRequiredCv: activeCvs.length > 0 ? Math.min(...activeCvs) : undefined,
     });
-  }, [charConfig, correlatedValve, maxShutoffDeltaP_bar, caseResults]);
+  }, [effectiveCharConfig, correlatedValve, effectiveShutoffDeltaP_bar, caseResults]);
+
+  const cageHasHardFacing = cageMaterial === 'SS316TI_CR_HF' || cageMaterial === 'STELLITE_6';
 
   const thermalResult = useMemo(
     () =>
@@ -525,10 +656,11 @@ export default function App() {
         cageAlloy,
         bodyAlloy,
         initialTemp_degC,
-        finalProcessTemp_degC,
+        finalProcessTemp_degC: effectiveThermalTargetTemp_degC,
         rampRate_degC_per_min,
         convectiveHeatTransferCoeff_W_m2K: convectiveH_W_m2K,
         requireLethalBellowsSeal,
+        cageHasHardFacing,
       }),
     [
       correlatedValve,
@@ -539,10 +671,11 @@ export default function App() {
       cageAlloy,
       bodyAlloy,
       initialTemp_degC,
-      finalProcessTemp_degC,
+      effectiveThermalTargetTemp_degC,
       rampRate_degC_per_min,
       convectiveH_W_m2K,
       requireLethalBellowsSeal,
+      cageHasHardFacing,
     ]
   );
 
@@ -554,10 +687,10 @@ export default function App() {
         selectedStemDia_mm,
         unsupportedStemLength_mm,
         stroke_mm: correlatedValve.stroke_mm,
-        shutoffDeltaP_bar: maxShutoffDeltaP_bar,
+        shutoffDeltaP_bar: effectiveShutoffDeltaP_bar,
         downstreamShutoffP2_bar_g: Math.max(
           0,
-          Math.min(...operatingCases.map((c) => c.P2_bar_a)) - 1.013
+          Number((maxUpstreamP1_bar_a - 1.013 - effectiveShutoffDeltaP_bar).toFixed(2))
         ),
         operatingTemp_degC: maxOperatingTemp_degC,
         flowDirection,
@@ -578,8 +711,8 @@ export default function App() {
       correlatedValve,
       selectedStemDia_mm,
       unsupportedStemLength_mm,
-      maxShutoffDeltaP_bar,
-      operatingCases,
+      effectiveShutoffDeltaP_bar,
+      maxUpstreamP1_bar_a,
       maxOperatingTemp_degC,
       flowDirection,
       shutoffClass,
@@ -595,6 +728,93 @@ export default function App() {
     ]
   );
 
+  // Per-tab engineering validation statuses for tab badge indicators
+  const tabStatuses = useMemo<Record<ActiveTabId, 'PASS' | 'WARNING' | 'CRITICAL'>>(() => {
+    const processCritical = caseResults.some(
+      (r) =>
+        r.regimeSeverity === 'CRITICAL' ||
+        r.noiseStatus === 'CRITICAL' ||
+        r.bodyVelocity_m_s > r.bodyVelocityLimit_m_s ||
+        r.outletMach > r.outletMachLimit ||
+        r.percentOfRatedCv > 100
+    );
+    const processWarning =
+      caseResults.some(
+        (r) =>
+          r.regimeSeverity === 'WARNING' ||
+          r.noiseStatus === 'WARNING' ||
+          r.percentOfRatedCv > 85 ||
+          r.percentOfRatedCv < 10
+      ) || Boolean(backpressureOrificeResult?.caseShares.some((s) => s.orificeChokedWarning));
+    const PROCESS_SIZING = processCritical ? 'CRITICAL' : processWarning ? 'WARNING' : 'PASS';
+
+    const CHARACTERISTICS =
+      charSimulation.nelesSafetyFactorTrapWarning || charSimulation.stabilityBandCoveragePct < 55
+        ? 'CRITICAL'
+        : charSimulation.stabilityBandCoveragePct < 80
+        ? 'WARNING'
+        : 'PASS';
+
+    const cageCritical =
+      cageSynthesis.structuralStatus === 'CRITICAL' ||
+      cageSynthesis.saturationSeverity === 'SATURATED_UPSIZE_RECOMMENDED' ||
+      cageSynthesis.drillManufacturabilityStatus === 'CRITICAL' ||
+      !cageSynthesis.naceSourCompliant ||
+      !cageSynthesis.tempCompliant;
+    const cageWarning =
+      cageSynthesis.structuralStatus === 'WARNING' ||
+      cageSynthesis.saturationSeverity !== 'OPTIMAL' ||
+      cageSynthesis.drillManufacturabilityStatus === 'WARNING' ||
+      !cageSynthesis.jetCoalescenceCompliant;
+    const CAGE_CAD_STRESS = cageCritical ? 'CRITICAL' : cageWarning ? 'WARNING' : 'PASS';
+
+    const thermalCritical =
+      thermalResult.radialBindingRisk === 'CRITICAL' ||
+      thermalResult.axialCrushRisk === 'CRITICAL' ||
+      thermalResult.gallingRisk === 'CRITICAL';
+    const thermalWarning =
+      thermalResult.radialBindingRisk === 'WARNING' ||
+      thermalResult.axialCrushRisk === 'WARNING' ||
+      thermalResult.gallingRisk === 'WARNING';
+    const TRANSIENT_THERMAL = thermalCritical ? 'CRITICAL' : thermalWarning ? 'WARNING' : 'PASS';
+
+    const activeSeatingMargin =
+      actuatorStemResult.activeMode === 'BALANCED'
+        ? actuatorStemResult.actuatorMarginBalancedPct
+        : actuatorStemResult.actuatorMarginUnbalancedPct;
+    const activeOpenMargin =
+      actuatorStemResult.activeMode === 'BALANCED'
+        ? actuatorStemResult.openStrokeMarginBalancedPct
+        : actuatorStemResult.openStrokeMarginUnbalancedPct;
+    const actuatorCritical =
+      actuatorStemResult.stemStructuralStatus === 'CRITICAL' ||
+      actuatorStemResult.sealShutoffCompatibilityStatus === 'CRITICAL' ||
+      activeSeatingMargin < 0 ||
+      activeOpenMargin < 0;
+    const actuatorWarning =
+      actuatorStemResult.stemStructuralStatus === 'WARNING' ||
+      actuatorStemResult.sealShutoffCompatibilityStatus === 'WARNING' ||
+      activeSeatingMargin < 10 ||
+      activeOpenMargin < 10;
+    const ACTUATOR_STEM = actuatorCritical ? 'CRITICAL' : actuatorWarning ? 'WARNING' : 'PASS';
+
+    return {
+      PROCESS_SIZING,
+      CHARACTERISTICS,
+      CAGE_CAD_STRESS,
+      TRANSIENT_THERMAL,
+      ACTUATOR_STEM,
+      MASTER_SCHEDULE: 'PASS',
+    };
+  }, [
+    caseResults,
+    backpressureOrificeResult,
+    charSimulation,
+    cageSynthesis,
+    thermalResult,
+    actuatorStemResult,
+  ]);
+
   // --- HELPER HANDLERS ---
   const handleSelectSizeFromSchedule = (dn: number) => {
     setSelectedDN(dn);
@@ -605,11 +825,77 @@ export default function App() {
       setCustomRatedCvOverride(null);
       setSelectedWallThickness_mm(spec.cageWallStd_mm);
       setSelectedStemDia_mm(spec.stemDiaStd_mm);
+      const minLineId_mm = Number((spec.d_mm * 1.25).toFixed(1));
+      const matchedSchedule =
+        ASME_PIPE_SCHEDULES.find(
+          (p) => p.dn >= dn && p.pipeID_mm >= spec.d_mm && p.id.endsWith('_SCH40')
+        ) ||
+        ASME_PIPE_SCHEDULES.find((p) => p.dn >= dn && p.pipeID_mm >= spec.d_mm);
       setPiping((prev) => ({
         ...prev,
-        upstreamPipeID_mm: Number((spec.d_mm * 1.25).toFixed(1)),
-        downstreamPipeID_mm: Number((spec.d_mm * 1.25).toFixed(1)),
+        upstreamPipeID_mm:
+          prev.upstreamPipeID_mm >= spec.d_mm
+            ? prev.upstreamPipeID_mm
+            : matchedSchedule
+            ? matchedSchedule.pipeID_mm
+            : minLineId_mm,
+        downstreamPipeID_mm:
+          prev.downstreamPipeID_mm >= spec.d_mm
+            ? prev.downstreamPipeID_mm
+            : matchedSchedule
+            ? matchedSchedule.pipeID_mm
+            : minLineId_mm,
+        pipeWallThickness_mm:
+          prev.upstreamPipeID_mm >= spec.d_mm
+            ? prev.pipeWallThickness_mm
+            : matchedSchedule
+            ? matchedSchedule.wall_mm
+            : prev.pipeWallThickness_mm,
       }));
+      if (
+        matchedSchedule &&
+        (piping.upstreamPipeID_mm < spec.d_mm || piping.downstreamPipeID_mm < spec.d_mm)
+      ) {
+        setPipeScheduleId(matchedSchedule.id);
+      }
+    }
+  };
+
+  const handlePipeScheduleChange = (schedId: string) => {
+    setPipeScheduleId(schedId);
+    const sched = ASME_PIPE_SCHEDULES.find((s) => s.id === schedId);
+    if (sched) {
+      setPiping((prev) => ({
+        ...prev,
+        upstreamPipeID_mm: sched.pipeID_mm,
+        downstreamPipeID_mm: sched.pipeID_mm,
+        pipeWallThickness_mm: sched.wall_mm,
+      }));
+    }
+  };
+
+  const handleCageMaterialChange = (matId: CageMaterialId) => {
+    setCageMaterial(matId);
+    const alloyMap: Record<CageMaterialId, ThermalAlloyId> = {
+      SS316TI_CR_HF: 'CF8M_316SS',
+      SS316L: 'CF8M_316SS',
+      SS410_HT: 'SS410_MARTENSITIC',
+      CA6NM_13CR4NI: 'SS410_MARTENSITIC',
+      PH17_4_H900: 'PH17_4',
+      PH17_4_H1150M: 'PH17_4',
+      HASTELLOY_C276: 'HASTELLOY_C276',
+      INCONEL_718: 'INCONEL_718',
+      STELLITE_6: 'INCONEL_718',
+    };
+    setCageAlloy(alloyMap[matId]);
+  };
+
+  const handleBodyMaterialCategoryChange = (cat: 'CARBON_STEEL' | 'STAINLESS_ALLOY') => {
+    setPiping((prev) => ({ ...prev, bodyMaterialCategory: cat }));
+    if (cat === 'CARBON_STEEL') {
+      setBodyAlloy('WCB_CARBON_STEEL');
+    } else if (bodyAlloy === 'WCB_CARBON_STEEL') {
+      setBodyAlloy('WC9_CR_MO');
     }
   };
 
@@ -704,6 +990,7 @@ export default function App() {
       timestamp: new Date().toISOString(),
       unitSystem,
       processUnits,
+      projectMeta,
       inputs: {
         selectedDN,
         pressureClass,
@@ -717,6 +1004,10 @@ export default function App() {
         customRatedCvOverride,
         enableBackpressureOrifice,
         orificeDeltaPSharePct,
+        pipeScheduleId,
+        autoSyncPv,
+        syncThermalTempWithProcess,
+        customShutoffDeltaP_bar,
         piping,
         operatingCases,
         charConfig,
@@ -789,8 +1080,22 @@ export default function App() {
 
         if (data.unitSystem) setUnitSystem(data.unitSystem);
         if (data.processUnits) setProcessUnits(data.processUnits);
+        if (data.projectMeta) {
+          setProjectMeta((prev) => ({ ...prev, ...data.projectMeta }));
+        }
 
         const inp = data.inputs || data;
+        if (inp.projectMeta) {
+          setProjectMeta((prev) => ({ ...prev, ...inp.projectMeta }));
+        }
+        if (inp.pipeScheduleId !== undefined) setPipeScheduleId(inp.pipeScheduleId);
+        if (inp.autoSyncPv !== undefined) setAutoSyncPv(inp.autoSyncPv);
+        if (inp.syncThermalTempWithProcess !== undefined) {
+          setSyncThermalTempWithProcess(inp.syncThermalTempWithProcess);
+        }
+        if (inp.customShutoffDeltaP_bar !== undefined) {
+          setCustomShutoffDeltaP_bar(inp.customShutoffDeltaP_bar);
+        }
         if (inp.selectedDN !== undefined) setSelectedDN(inp.selectedDN);
         if (inp.pressureClass !== undefined) setPressureClass(inp.pressureClass);
         if (inp.bodyStyle !== undefined) setBodyStyle(inp.bodyStyle);
@@ -883,10 +1188,13 @@ export default function App() {
               <Cpu className="w-5 h-5" />
             </div>
             <div>
-              <div className="flex items-center gap-2.5">
+              <div className="flex items-center gap-2.5 flex-wrap">
                 <h1 className="text-base font-bold tracking-tight text-white">
                   DY-SIZE // CONTROL VALVE & DRILLED CAGE CAE SUITE
                 </h1>
+                <span className="px-2 py-0.5 rounded bg-[#0f8b8d] text-white border border-[#7fe0e2]/50 font-mono text-[11px] font-bold tracking-wide shadow-sm">
+                  Rev {APP_VERSION}
+                </span>
                 <span className="px-2 py-0.5 rounded bg-[#13315c] text-[#ffd77a] border border-[#f2a900]/40 font-mono text-[11px] font-semibold">
                   IEC 60534 • ASME B16.34 • ISA-75
                 </span>
@@ -1062,14 +1370,628 @@ export default function App() {
         </div>
       </header>
 
+      {/* GLOBAL PROJECT METADATA, WORKBENCH TABS & HARDWARE CONTROL BAR (BELOW HEADER) */}
+      <section className="bg-[#edf1f5] border-b border-[#cfd8e3] px-6 py-3 no-print">
+        <div className="max-w-[1600px] mx-auto space-y-2.5">
+          {/* Compact Project / Tag Identification Strip (Synced to Print Datasheet & .DYSol) */}
+          <div className="bg-white rounded-lg px-3 py-2 border border-[#cfd8e3] shadow-sm grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-2.5 items-center">
+            <div className="lg:col-span-2 flex items-center gap-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+                Tag No.
+              </span>
+              <input
+                type="text"
+                value={projectMeta.tagNumber}
+                onChange={(e) => setProjectMeta({ ...projectMeta, tagNumber: e.target.value })}
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono font-bold text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                placeholder="FV-1001A"
+              />
+            </div>
+            <div className="lg:col-span-5 flex items-center gap-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+                Service
+              </span>
+              <input
+                type="text"
+                value={projectMeta.serviceDescription}
+                onChange={(e) =>
+                  setProjectMeta({ ...projectMeta, serviceDescription: e.target.value })
+                }
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                placeholder="Service Description"
+              />
+            </div>
+            <div className="lg:col-span-3 flex items-center gap-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+                Line / P&amp;ID
+              </span>
+              <input
+                type="text"
+                value={projectMeta.lineNumber}
+                onChange={(e) => setProjectMeta({ ...projectMeta, lineNumber: e.target.value })}
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                placeholder='4"-BFW-104'
+              />
+            </div>
+            <div className="lg:col-span-2 flex items-center gap-2">
+              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+                Rev
+              </span>
+              <input
+                type="text"
+                value={projectMeta.projectRev}
+                onChange={(e) => setProjectMeta({ ...projectMeta, projectRev: e.target.value })}
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                placeholder="Rev A"
+              />
+            </div>
+          </div>
+
+          {/* SEGMENTED WORKBENCH MODE SWITCHER WITH LIVE PASS/WARNING/CRITICAL INDICATORS */}
+          <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-[#cfd8e3] shadow-sm">
+            {[
+              {
+                id: 'PROCESS_SIZING',
+                label: '1. Sizing & Noise (IEC 60534)',
+                icon: Activity,
+              },
+              {
+                id: 'CHARACTERISTICS',
+                label: '2. Characteristic & Gain (Pv)',
+                icon: Sliders,
+              },
+              {
+                id: 'CAGE_CAD_STRESS',
+                label: '3. Drilled Cage, Stress & CAM',
+                icon: Layers,
+              },
+              {
+                id: 'TRANSIENT_THERMAL',
+                label: '4. Thermal Binding & Bonnet',
+                icon: Thermometer,
+              },
+              {
+                id: 'ACTUATOR_STEM',
+                label: '5. Actuator Thrust & Stem',
+                icon: Wrench,
+              },
+              {
+                id: 'MASTER_SCHEDULE',
+                label: '6. Valve Correlation Table',
+                icon: Table,
+              },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              const tabStatus = tabStatuses[tab.id as ActiveTabId];
+              const dotColor =
+                tabStatus === 'CRITICAL'
+                  ? 'bg-red-500 ring-2 ring-red-200'
+                  : tabStatus === 'WARNING'
+                  ? 'bg-amber-400 ring-2 ring-amber-200'
+                  : 'bg-emerald-400';
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id as ActiveTabId)}
+                  className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono transition ${
+                    isActive
+                      ? 'bg-[#0f8b8d] text-white font-semibold shadow-sm'
+                      : 'text-[#13315c] hover:text-[#0b2545] hover:bg-[#edf1f5]'
+                  }`}
+                  title={`Module status: ${tabStatus}`}
+                >
+                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <span>{tab.label}</span>
+                  <span
+                    className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
+                    aria-label={`Status ${tabStatus}`}
+                  />
+                </button>
+              );
+            })}
+          </div>
+
+          {/* GLOBAL VALVE HARDWARE SELECTORS */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
+            {/* Nominal Valve Size */}
+            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+                Nominal Valve Size (DN / NPS)
+              </label>
+              <select
+                value={selectedDN}
+                onChange={(e) => handleSelectSizeFromSchedule(Number(e.target.value))}
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+              >
+                {GENERIC_VALVE_SCHEDULE.map((s) => (
+                  <option key={s.dn} value={s.dn}>
+                    DN{s.dn} ({s.npsLabel}) — Bore Ø{s.d_port_mm}mm
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Pressure Rating Class */}
+            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+                Pressure Class (ASME / PN)
+              </label>
+              <select
+                value={pressureClass}
+                onChange={(e) => setPressureClass(e.target.value as PressureClassId)}
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+              >
+                {Object.values(PRESSURE_CLASSES).map((pc) => (
+                  <option key={pc.id} value={pc.id}>
+                    {pc.label} (K_class={pc.capacityMultiplierKClass.toFixed(2)})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Generic Trim Family */}
+            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+                Generic Trim Style & Stages
+              </label>
+              <select
+                value={trimStyle}
+                onChange={(e) => setTrimStyle(e.target.value as TrimStyleId)}
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+              >
+                {Object.values(TRIM_STYLES).map((ts) => (
+                  <option key={ts.id} value={ts.id}>
+                    {ts.shortName} (Cd≈{ts.cdSpecificCapacity})
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Reduced Trim Capacity Step */}
+            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+                Trim Capacity Factor (R5 Series)
+              </label>
+              <select
+                value={reducedTrimFactor}
+                onChange={(e) => {
+                  setReducedTrimFactor(Number(e.target.value));
+                  setCustomBoreOverride(null);
+                  setCustomRatedCvOverride(null);
+                }}
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+              >
+                {REDUCED_TRIM_FACTORS.map((rf) => (
+                  <option key={rf.factor} value={rf.factor}>
+                    {rf.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Body Pattern & Flow Direction */}
+            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+                Body Style & Flow Direction
+              </label>
+              <div className="grid grid-cols-2 gap-1.5">
+                <select
+                  value={bodyStyle}
+                  onChange={(e) => setBodyStyle(e.target.value as BodyStyleId)}
+                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                >
+                  <option value="GLOBE_STRAIGHT">Globe (1.0x)</option>
+                  <option value="ANGLE_BODY">Angle (1.12x)</option>
+                </select>
+                <select
+                  value={flowDirection}
+                  onChange={(e) => setFlowDirection(e.target.value as FlowDirectionId)}
+                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                >
+                  <option value="FTC">FTC (Over)</option>
+                  <option value="FTO">FTO (Under)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Stroke Mode (Standard vs Extended) */}
+            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
+              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+                Stroke Schedule (H)
+              </label>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => {
+                    setUseExtendedStroke(false);
+                    setCustomStrokeOverride(null);
+                  }}
+                  className={`flex-1 py-1.5 px-2 rounded text-xs font-mono border transition ${
+                    !useExtendedStroke
+                      ? 'bg-[#0f8b8d] text-white border-[#0f8b8d] font-semibold'
+                      : 'bg-white text-[#13315c] border-[#cfd8e3] hover:bg-[#edf1f5]'
+                  }`}
+                >
+                  Std ({correlatedValve.stroke_mm}mm)
+                </button>
+                <button
+                  onClick={() => {
+                    setUseExtendedStroke(true);
+                    setCustomStrokeOverride(null);
+                  }}
+                  className={`flex-1 py-1.5 px-2 rounded text-xs font-mono border transition ${
+                    useExtendedStroke
+                      ? 'bg-[#0f8b8d] text-white border-[#0f8b8d] font-semibold'
+                      : 'bg-white text-[#13315c] border-[#cfd8e3] hover:bg-[#edf1f5]'
+                  }`}
+                >
+                  Ext Stroke
+                </button>
+              </div>
+            </div>
+          </div>
+
+          {/* COLLAPSIBLE LIVE CORRELATED HARDWARE KPI READOUT STRIP */}
+          <div className="flex items-center justify-between gap-2">
+            <button
+              type="button"
+              onClick={() => setShowHardwareKpis((prev) => !prev)}
+              className="inline-flex items-center gap-1.5 text-[11px] font-mono font-semibold text-[#13315c] hover:text-[#0f8b8d] transition"
+            >
+              {showHardwareKpis ? (
+                <ChevronUp className="w-3.5 h-3.5" />
+              ) : (
+                <ChevronDown className="w-3.5 h-3.5" />
+              )}
+              <span>
+                {showHardwareKpis
+                  ? 'Hide Correlated Hardware Telemetry'
+                  : 'Show Correlated Hardware Telemetry'}
+              </span>
+              {!showHardwareKpis && (
+                <span className="text-slate-500 font-normal">
+                  — {correlatedValve.ratedCv} Cv ({correlatedValve.ratedKv} Kv) • Ø
+                  {correlatedValve.d_port_mm}mm • {correlatedValve.stroke_mm}mm •{' '}
+                  {cageSynthesis.totalHoles} holes
+                </span>
+              )}
+            </button>
+            <span className="hidden sm:inline text-[11px] font-mono text-slate-500">
+              {projectMeta.tagNumber} • DN{selectedDN} (
+              {GENERIC_VALVE_SCHEDULE.find((s) => s.dn === selectedDN)?.npsLabel}) •{' '}
+              {PRESSURE_CLASSES[pressureClass].label.split('/')[0]}
+            </span>
+          </div>
+
+          {showHardwareKpis && (
+            <div className="instrument-panel rounded-xl p-2.5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  Correlated Rated Cv / Kv
+                </span>
+                <span className="text-sm font-mono font-bold text-[#7fe0e2]">
+                  {correlatedValve.ratedCv} Cv{' '}
+                  <span className="text-xs text-slate-400 font-normal">
+                    ({correlatedValve.ratedKv} Kv)
+                  </span>
+                </span>
+              </div>
+
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  Specific Capacity Cd (Cv/d²)
+                </span>
+                <span className="text-sm font-mono font-bold text-[#ffd77a]">
+                  {correlatedValve.effectiveCd}{' '}
+                  <span className="text-xs text-slate-400 font-normal">Cv/in²</span>
+                </span>
+              </div>
+
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  Seat Port Bore Ød_port
+                </span>
+                <span className="text-sm font-mono font-bold text-[#7fe0e2]">
+                  {correlatedValve.d_port_mm} mm{' '}
+                  <span className="text-xs text-slate-400 font-normal">
+                    ({correlatedValve.d_port_in}")
+                  </span>
+                </span>
+              </div>
+
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  Rated Stroke H (Curtain Ratio)
+                </span>
+                <span className="text-sm font-mono font-bold text-[#ffd77a]">
+                  {correlatedValve.stroke_mm} mm{' '}
+                  <span className="text-xs text-[#7fe0e2] font-normal">
+                    ({correlatedValve.curtainToSeatAreaRatio}x Seat)
+                  </span>
+                </span>
+              </div>
+
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  Series Cv (Trim / Seat / Body)
+                </span>
+                <span className="text-xs font-mono font-semibold text-slate-200">
+                  {correlatedValve.cvTrimComponent} / {correlatedValve.cvSeatComponent} /{' '}
+                  {correlatedValve.cvBodyComponent}
+                </span>
+              </div>
+
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  Recovery Factors (FL / Kc / xT)
+                </span>
+                <span className="text-sm font-mono font-bold text-[#8be0a8]">
+                  {correlatedValve.FL} / {correlatedValve.Kc} / {correlatedValve.xT}
+                </span>
+              </div>
+
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  ASME Min Body Wall t_body
+                </span>
+                <span className="text-sm font-mono font-bold text-[#ffd77a]">
+                  {correlatedValve.bodyMinWall_mm} mm
+                </span>
+              </div>
+
+              <div className="instrument-tile rounded-lg px-3 py-2">
+                <span className="block text-[10px] font-mono text-slate-400 uppercase">
+                  Synthesized Cage Orifices
+                </span>
+                <span className="text-sm font-mono font-bold text-[#7fe0e2]">
+                  {cageSynthesis.totalHoles} holes{' '}
+                  <span className="text-xs text-slate-400 font-normal">
+                    (Ø{cageSynthesis.meanHoleDia_mm}mm)
+                  </span>
+                </span>
+              </div>
+            </div>
+          )}
+        </div>
+      </section>
+
       {/* MAIN WORKBENCH CONTENT AREA */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-6 space-y-6">
+      <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-6 space-y-6 no-print">
         {/* =====================================================================
             TAB 1: MULTI-CONDITION PROCESS SIZING, SWAGED PIPING & ACOUSTIC NOISE
            ===================================================================== */}
         {activeTab === 'PROCESS_SIZING' && (
           <div className="space-y-6">
-            {/* Multi-Condition Operating Inputs Table */}
+            {/* CARD 1: Fluid Preset Loader & Swaged Piping Envelope */}
+            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+              {/* Fluid Presets & Custom Dimension Overrides */}
+              <div className="lg:col-span-5 dy-card overflow-hidden">
+                <div className="section-band px-5 py-3.5">
+                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
+                    <Gauge className="w-4 h-4 text-[#ffd77a]" />
+                    1. Process Fluid Benchmark Presets &amp; Hardware Overrides
+                  </h2>
+                  <p className="text-xs text-slate-300 font-mono">
+                    Load standard fluid properties or customize bore/stroke/Cv
+                  </p>
+                </div>
+
+                <div className="p-5 space-y-4">
+                  <div>
+                    <label className="block text-xs font-mono text-[#13315c] font-semibold mb-1.5">
+                      Quick-Load Process Fluid Preset (Applies to All Operating Cases)
+                    </label>
+                    <select
+                      onChange={(e) => applyFluidPresetToAllCases(e.target.value)}
+                      defaultValue="BFW_185C"
+                      className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                    >
+                      {FLUID_PRESETS.map((fp) => (
+                        <option key={fp.id} value={fp.id}>
+                          {fp.name} — [{fp.phase}]
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className="grid grid-cols-3 gap-3 pt-1">
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Custom Seat Bore (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        placeholder={`${correlatedValve.d_port_mm}`}
+                        value={customBoreOverride ?? ''}
+                        onChange={(e) =>
+                          setCustomBoreOverride(
+                            e.target.value ? Number(e.target.value) : null
+                          )
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Custom Stroke H (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        placeholder={`${correlatedValve.stroke_mm}`}
+                        value={customStrokeOverride ?? ''}
+                        onChange={(e) =>
+                          setCustomStrokeOverride(
+                            e.target.value ? Number(e.target.value) : null
+                          )
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Custom Rated Cv
+                      </label>
+                      <input
+                        type="number"
+                        step="1"
+                        placeholder={`${correlatedValve.ratedCv}`}
+                        value={customRatedCvOverride ?? ''}
+                        onChange={(e) =>
+                          setCustomRatedCvOverride(
+                            e.target.value ? Number(e.target.value) : null
+                          )
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Swaged Piping & Water-Hammer Envelope */}
+              <div className="lg:col-span-7 dy-card overflow-hidden">
+                <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-bold text-white">
+                      Swaged Piping Geometry (FP, FLP, xTP) &amp; Water-Hammer Envelope
+                    </h2>
+                    <p className="text-xs text-slate-300 font-mono">
+                      Select ASME B36.10M pipe schedule or edit D1/D2; coupled reducer head loss &amp; Joukowsky reflection
+                    </p>
+                  </div>
+                  <span
+                    className={`px-2.5 py-1 rounded bg-[#182028] border border-[#2f3b47] text-xs font-mono ${
+                      piping.upstreamPipeID_mm < correlatedValve.d_mm ||
+                      piping.downstreamPipeID_mm < correlatedValve.d_mm
+                        ? 'text-[#ffd77a]'
+                        : 'text-[#7fe0e2]'
+                    }`}
+                  >
+                    Valve d = {correlatedValve.d_mm} mm vs Pipe D1/D2 = {piping.upstreamPipeID_mm}/
+                    {piping.downstreamPipeID_mm} mm
+                  </span>
+                </div>
+
+                <div className="p-5 space-y-3">
+                  <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
+                    <div className="sm:col-span-7">
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        ASME B36.10M Pipe Schedule (Sets D1, D2 &amp; t_p)
+                      </label>
+                      <select
+                        value={pipeScheduleId}
+                        onChange={(e) => handlePipeScheduleChange(e.target.value)}
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      >
+                        <option value="CUSTOM">Custom Pipe ID / Wall</option>
+                        {ASME_PIPE_SCHEDULES.map((sched) => (
+                          <option key={sched.id} value={sched.id}>
+                            {sched.label}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                    <div className="sm:col-span-5">
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Body Alloy Group (Syncs Tab 4 Body)
+                      </label>
+                      <select
+                        value={piping.bodyMaterialCategory}
+                        onChange={(e) =>
+                          handleBodyMaterialCategoryChange(
+                            e.target.value as 'CARBON_STEEL' | 'STAINLESS_ALLOY'
+                          )
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      >
+                        <option value="STAINLESS_ALLOY">SS / Cr-Mo (≤15 m/s)</option>
+                        <option value="CARBON_STEEL">Carbon Steel (≤10.5 m/s)</option>
+                      </select>
+                    </div>
+                  </div>
+
+                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Upstream ID D1 (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={piping.upstreamPipeID_mm}
+                        onChange={(e) => {
+                          setPipeScheduleId('CUSTOM');
+                          setPiping({ ...piping, upstreamPipeID_mm: Number(e.target.value) });
+                        }}
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Downstream D2 (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={piping.downstreamPipeID_mm}
+                        onChange={(e) => {
+                          setPipeScheduleId('CUSTOM');
+                          setPiping({ ...piping, downstreamPipeID_mm: Number(e.target.value) });
+                        }}
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Pipe Wall t_p (mm)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.1"
+                        value={piping.pipeWallThickness_mm}
+                        onChange={(e) => {
+                          setPipeScheduleId('CUSTOM');
+                          setPiping({ ...piping, pipeWallThickness_mm: Number(e.target.value) });
+                        }}
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Line Length L (m)
+                      </label>
+                      <input
+                        type="number"
+                        step="5"
+                        value={piping.upstreamPipeLength_m}
+                        onChange={(e) =>
+                          setPiping({ ...piping, upstreamPipeLength_m: Number(e.target.value) })
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                    <div>
+                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Fast-Close Time (s)
+                      </label>
+                      <input
+                        type="number"
+                        step="0.5"
+                        value={piping.actuatorCloseTime_s}
+                        onChange={(e) =>
+                          setPiping({ ...piping, actuatorCloseTime_s: Number(e.target.value) })
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      />
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 2: Multi-Condition Operating Inputs Table */}
             <div className="dy-card overflow-hidden">
               <div className="section-band px-5 py-3.5 flex items-center justify-between gap-4">
                 <div>
@@ -1449,6 +2371,10 @@ export default function App() {
                           </th>
                           {operatingCases.map((c, idx) => {
                             const displayP2 = Number(fromInternalPressure(c.P2_bar_a, processUnits.P2).toFixed(2));
+                            const orificeShare =
+                              enableBackpressureOrifice && backpressureOrificeResult
+                                ? backpressureOrificeResult.caseShares.find((s) => s.id === c.id)
+                                : undefined;
                             return (
                               <td key={c.id} className="py-2 px-2.5">
                                 <input
@@ -1463,6 +2389,11 @@ export default function App() {
                                   }}
                                   className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
                                 />
+                                {orificeShare && (
+                                  <span className="block text-[9px] font-mono text-[#0f8b8d] mt-0.5">
+                                    P2*={Number(fromInternalPressure(orificeShare.midPressurePmid_bar_a, processUnits.P2).toFixed(2))}
+                                  </span>
+                                )}
                               </td>
                             );
                           })}
@@ -1550,7 +2481,7 @@ export default function App() {
                                     role="tooltip"
                                     className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
                                   >
-                                    For Liquid: flowing density ρ in kg/m³, lb/ft³, or Specific Gravity (SG). For Gas/Steam: molecular weight MW in kg/kmol (g/mol).
+                                    For Liquid: flowing density ρ in kg/m³, lb/ft³, or Specific Gravity (SG). For Gas/Steam: molecular weight MW in kg/kmol. Two-Phase displays both ρ_L and MW_g.
                                   </span>
                                 </span>
                               </div>
@@ -1558,7 +2489,41 @@ export default function App() {
                           </th>
                           {operatingCases.map((c, idx) => (
                             <td key={c.id} className="py-2 px-2.5">
-                              {c.fluidPhase === 'LIQUID' ? (
+                              {c.fluidPhase === 'TWO_PHASE' ? (
+                                <div className="grid grid-cols-2 gap-1">
+                                  <div>
+                                    <span className="block text-[9px] text-slate-500">ρ_L</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={Number(fromInternalDensity(c.rho_kg_m3, processUnits.density).toFixed(2))}
+                                      onChange={(e) => {
+                                        const next = [...operatingCases];
+                                        const val = Number(e.target.value);
+                                        next[idx].rho_kg_m3 = Number(toInternalDensity(val, processUnits.density).toFixed(2));
+                                        setOperatingCases(next);
+                                      }}
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      title={`Liquid Density (${processUnits.density})`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="block text-[9px] text-slate-500">MW_g</span>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      value={c.molecularWeight}
+                                      onChange={(e) => {
+                                        const next = [...operatingCases];
+                                        next[idx].molecularWeight = Number(e.target.value);
+                                        setOperatingCases(next);
+                                      }}
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      title="Vapor/Gas Molecular Weight (kg/kmol)"
+                                    />
+                                  </div>
+                                </div>
+                              ) : c.fluidPhase === 'LIQUID' ? (
                                 <input
                                   type="number"
                                   step="any"
@@ -1599,7 +2564,7 @@ export default function App() {
                                   value={processUnits.Pv}
                                   onChange={(e) => setProcessUnits({ ...processUnits, Pv: e.target.value as PressureUnit })}
                                   className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
-                                  title="Change Vapor Pressure display unit with auto-conversion"
+                                  title="Change Vapor/Critical Pressure display unit with auto-conversion"
                                 >
                                   <option value="bar_a">bar a</option>
                                   <option value="psia">psia</option>
@@ -1617,7 +2582,7 @@ export default function App() {
                                     role="tooltip"
                                     className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
                                   >
-                                    For Liquid: fluid vapor pressure Pv at T1 (governs choked ΔP and cavitation/flashing). For Gas/Steam: specific heat ratio γ = Cp/Cv.
+                                    For Liquid: fluid vapor pressure Pv at T1 (governs choked ΔP and cavitation/flashing). For Gas/Steam: specific heat ratio γ = Cp/Cv. Two-Phase displays both Pv and γ.
                                   </span>
                                 </span>
                               </div>
@@ -1625,7 +2590,41 @@ export default function App() {
                           </th>
                           {operatingCases.map((c, idx) => (
                             <td key={c.id} className="py-2 px-2.5">
-                              {c.fluidPhase === 'LIQUID' ? (
+                              {c.fluidPhase === 'TWO_PHASE' ? (
+                                <div className="grid grid-cols-2 gap-1">
+                                  <div>
+                                    <span className="block text-[9px] text-slate-500">Pv</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={Number(fromInternalPressure(c.Pv_bar_a, processUnits.Pv).toFixed(3))}
+                                      onChange={(e) => {
+                                        const next = [...operatingCases];
+                                        const val = Number(e.target.value);
+                                        next[idx].Pv_bar_a = Number(toInternalPressure(val, processUnits.Pv).toFixed(4));
+                                        setOperatingCases(next);
+                                      }}
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      title={`Vapor Pressure Pv (${processUnits.Pv})`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="block text-[9px] text-slate-500">γ</span>
+                                    <input
+                                      type="number"
+                                      step="0.02"
+                                      value={c.gammaCpCv}
+                                      onChange={(e) => {
+                                        const next = [...operatingCases];
+                                        next[idx].gammaCpCv = Number(e.target.value);
+                                        setOperatingCases(next);
+                                      }}
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      title="Specific Heat Ratio Cp/Cv"
+                                    />
+                                  </div>
+                                </div>
+                              ) : c.fluidPhase === 'LIQUID' ? (
                                 <input
                                   type="number"
                                   step="any"
@@ -1657,6 +2656,59 @@ export default function App() {
                           ))}
                         </tr>
 
+                        {operatingCases.some((c) => c.fluidPhase === 'LIQUID' || c.fluidPhase === 'TWO_PHASE') && (
+                          <tr className="hover:bg-[#f8fafc]">
+                            <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                              {renderParamLabel(
+                                `Pc (${processUnits.Pv}) / c_L (m/s)`,
+                                'Thermodynamic critical pressure Pc (sets IEC 60534-2-1 critical ratio FF = 0.96 - 0.28*sqrt(Pv/Pc)) and liquid speed of sound c_L (drives Joukowsky surge pressure).',
+                                'top'
+                              )}
+                            </th>
+                            {operatingCases.map((c, idx) => (
+                              <td key={c.id} className="py-2 px-2.5">
+                                {c.fluidPhase === 'LIQUID' || c.fluidPhase === 'TWO_PHASE' ? (
+                                  <div className="grid grid-cols-2 gap-1">
+                                    <div>
+                                      <span className="block text-[9px] text-slate-500">Pc</span>
+                                      <input
+                                        type="number"
+                                        step="any"
+                                        value={Number(fromInternalPressure(c.Pc_bar_a, processUnits.Pv).toFixed(2))}
+                                        onChange={(e) => {
+                                          const next = [...operatingCases];
+                                          const val = Number(e.target.value);
+                                          next[idx].Pc_bar_a = Number(toInternalPressure(val, processUnits.Pv).toFixed(3));
+                                          setOperatingCases(next);
+                                        }}
+                                        className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                        title={`Critical Pressure Pc (${processUnits.Pv})`}
+                                      />
+                                    </div>
+                                    <div>
+                                      <span className="block text-[9px] text-slate-500">c_L</span>
+                                      <input
+                                        type="number"
+                                        step="10"
+                                        value={c.speedOfSound_m_s}
+                                        onChange={(e) => {
+                                          const next = [...operatingCases];
+                                          next[idx].speedOfSound_m_s = Number(e.target.value);
+                                          setOperatingCases(next);
+                                        }}
+                                        className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                        title="Fluid Speed of Sound c_L (m/s) for Joukowsky Water-Hammer"
+                                      />
+                                    </div>
+                                  </div>
+                                ) : (
+                                  <span className="text-slate-400 text-[11px]">—</span>
+                                )}
+                              </td>
+                            ))}
+                          </tr>
+                        )}
+
                         <tr className="hover:bg-[#f8fafc]">
                           <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
                             <div className="flex items-center justify-between gap-2">
@@ -1684,7 +2736,7 @@ export default function App() {
                                     role="tooltip"
                                     className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
                                   >
-                                    For Liquid: kinematic viscosity ν (used for IEC 60534-2-1 Reynolds correction F_R). For Gas/Steam: compressibility factor Z.
+                                    For Liquid: kinematic viscosity ν (used for IEC 60534-2-1 Reynolds correction F_R). For Gas/Steam: compressibility factor Z. Two-Phase displays both ν and Z.
                                   </span>
                                 </span>
                               </div>
@@ -1692,7 +2744,41 @@ export default function App() {
                           </th>
                           {operatingCases.map((c, idx) => (
                             <td key={c.id} className="py-2 px-2.5">
-                              {c.fluidPhase === 'LIQUID' ? (
+                              {c.fluidPhase === 'TWO_PHASE' ? (
+                                <div className="grid grid-cols-2 gap-1">
+                                  <div>
+                                    <span className="block text-[9px] text-slate-500">ν</span>
+                                    <input
+                                      type="number"
+                                      step="any"
+                                      value={Number(fromInternalViscosity(c.viscosity_cSt, processUnits.viscosity).toFixed(2))}
+                                      onChange={(e) => {
+                                        const next = [...operatingCases];
+                                        const val = Number(e.target.value);
+                                        next[idx].viscosity_cSt = Number(toInternalViscosity(val, processUnits.viscosity).toFixed(3));
+                                        setOperatingCases(next);
+                                      }}
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      title={`Kinematic Viscosity (${processUnits.viscosity})`}
+                                    />
+                                  </div>
+                                  <div>
+                                    <span className="block text-[9px] text-slate-500">Z</span>
+                                    <input
+                                      type="number"
+                                      step="0.02"
+                                      value={c.compressibilityZ}
+                                      onChange={(e) => {
+                                        const next = [...operatingCases];
+                                        next[idx].compressibilityZ = Number(e.target.value);
+                                        setOperatingCases(next);
+                                      }}
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      title="Compressibility Factor Z"
+                                    />
+                                  </div>
+                                </div>
+                              ) : c.fluidPhase === 'LIQUID' ? (
                                 <input
                                   type="number"
                                   step="any"
@@ -1761,12 +2847,12 @@ export default function App() {
                           </tr>
                         )}
 
-                        {/* LIVE CALCULATED OUTPUT ROWS (DARK INSTRUMENT TELEMETRY) */}
+                        {/* LIVE CALCULATED OUTPUT SUMMARY ROWS (TRIMMED TO CV & TRAVEL; DETAILED DIAGNOSTICS BELOW) */}
                         <tr className="bg-[#0f1419] text-slate-200 border-t-2 border-[#2f3b47]">
                           <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
                             {renderParamLabel(
                               'Calculated Req. Cv',
-                              'Required IEC 60534-2-1 flow coefficient (Cv / Kv) for this operating condition, auto-recalculated when valve size, piping, or trim changes.',
+                              'Required IEC 60534-2-1 flow coefficient (Cv / Kv) for this operating condition (uses coupled P_mid when Backpressure Orifice is enabled).',
                               'top'
                             )}
                           </th>
@@ -1833,100 +2919,6 @@ export default function App() {
                             );
                           })}
                         </tr>
-
-                        <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
-                          <th className="py-2.5 px-3 font-semibold text-[#7fe0e2] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
-                            {renderParamLabel(
-                              'Req. FL / Effective FL(h)',
-                              'Warren VSSTR-07 Required FL = sqrt(dP/(P1-FF*Pv)) vs stroke-dependent valve recovery FL(h) and xT(h) at predicted plug travel.',
-                              'top'
-                            )}
-                          </th>
-                          {operatingCases.map((c) => {
-                            const res = caseResults.find((r) => r.id === c.id);
-                            const flWarn =
-                              res && res.fluidPhase === 'LIQUID' && res.FL_required > res.FL_effectiveAtTravel;
-                            return (
-                              <td
-                                key={c.id}
-                                className="py-2.5 px-2.5 bg-[#182028] border-l border-[#2f3b47]"
-                              >
-                                {res ? (
-                                  <div className="flex flex-col gap-0.5 text-[11px]">
-                                    <div className="flex items-baseline justify-between gap-1">
-                                      <span className={flWarn ? 'font-bold text-[#ffd77a]' : 'font-bold text-[#8be0a8]'}>
-                                        {res.fluidPhase === 'LIQUID'
-                                          ? `Req ${res.FL_required}`
-                                          : res.twoPhaseModelUsed
-                                          ? '2Φ Mix'
-                                          : `xT ${res.xT_effectiveAtTravel}`}
-                                      </span>
-                                      <span className="text-[10px] text-slate-400">
-                                        {res.fluidPhase === 'LIQUID'
-                                          ? `FL(h)=${res.FL_effectiveAtTravel}`
-                                          : res.steamSuperheat_degC !== undefined
-                                          ? `ΔTsup ${res.steamSuperheat_degC}°C`
-                                          : `FM ${res.multistageFactorFM}`}
-                                      </span>
-                                    </div>
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-500">—</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
-
-                        <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
-                          <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
-                            {renderParamLabel(
-                              'ISA-RP75.23 σ / σ_mr & OSHA',
-                              'Service cavitation index σ vs ISA-RP75.23 max recommended damage limit σ_mr (with material hardness resistance index), plus OSHA/NIOSH acoustic shift.',
-                              'top'
-                            )}
-                          </th>
-                          {operatingCases.map((c) => {
-                            const res = caseResults.find((r) => r.id === c.id);
-                            const sigmaColor = !res
-                              ? 'text-slate-500'
-                              : res.fluidPhase !== 'LIQUID'
-                              ? 'text-[#7fe0e2]'
-                              : res.sigmaCavitation < res.sigmaConstant_c
-                              ? 'text-[#ff8a80]'
-                              : res.sigmaCavitation < res.sigmaRecommended_mr
-                              ? 'text-[#ffd77a]'
-                              : 'text-[#8be0a8]';
-                            return (
-                              <td
-                                key={c.id}
-                                className="py-2.5 px-2.5 bg-[#182028] border-l border-[#2f3b47]"
-                              >
-                                {res ? (
-                                  <div className="flex flex-col gap-0.5 text-[11px]">
-                                    <div className="flex items-baseline justify-between gap-1">
-                                      <span className={`font-bold ${sigmaColor}`}>
-                                        {res.fluidPhase === 'LIQUID'
-                                          ? `σ=${res.sigmaCavitation}`
-                                          : `FM=${res.multistageFactorFM}`}
-                                      </span>
-                                      <span className="text-[10px] text-slate-400">
-                                        {res.fluidPhase === 'LIQUID'
-                                          ? `σ_mr=${res.sigmaRecommended_mr}`
-                                          : `SPLe ${res.expanderNoise_dBA}dB`}
-                                      </span>
-                                    </div>
-                                    <span className="text-[9px] text-slate-400 truncate">
-                                      {res.oshaNioshExposureSummary}
-                                    </span>
-                                  </div>
-                                ) : (
-                                  <span className="text-slate-500">—</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                        </tr>
                       </tbody>
                     </table>
                   );
@@ -1934,7 +2926,211 @@ export default function App() {
               </div>
             </div>
 
-            {/* IEC 60534 SIZING, CAVITATION, VELOCITY & ACOUSTIC NOISE DIAGNOSTIC MATRIX */}
+            {/* CARD 3: AUTOMATED VALVE SIZE & PRESSURE CLASS SELECTION CARD */}
+            <div className="dy-card overflow-hidden">
+              <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+                <div className="flex items-center gap-2.5">
+                  <div className="w-8 h-8 rounded-lg bg-[#0b2545] border border-[#f2a900]/60 flex items-center justify-center text-[#8be0a8]">
+                    <CheckCircle2 className="w-5 h-5" />
+                  </div>
+                  <div>
+                    <h2 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
+                      3. Multi-Condition Valve Sizing &amp; Selection Analysis
+                      <span className="px-2 py-0.5 rounded bg-[#182028] text-[#8be0a8] border border-[#2f3b47] font-mono text-[10px] font-semibold">
+                        ALL CONDITIONS ACCOMMODATED IN ONE VALVE
+                      </span>
+                    </h2>
+                    <p className="text-xs text-slate-300 font-mono">
+                      Calculates actual required Cv per condition, checks pressure &amp; temperature limits, and selects optimal standard size on{' '}
+                      {charConfig.type.replace(/_/g, ' ')} characteristic
+                    </p>
+                  </div>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowCandidateComparison((prev) => !prev)}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#182028] hover:bg-[#222d38] text-slate-200 border border-[#2f3b47] font-mono font-semibold text-xs transition"
+                  >
+                    {showCandidateComparison ? (
+                      <ChevronUp className="w-3.5 h-3.5 text-[#ffd77a]" />
+                    ) : (
+                      <ChevronDown className="w-3.5 h-3.5 text-[#ffd77a]" />
+                    )}
+                    Compare All DN Sizes ({valveRecommendation.allSizesFeasible.length})
+                  </button>
+                  <button
+                    onClick={() => {
+                      handleSelectSizeFromSchedule(valveRecommendation.recommendedDN);
+                      setPressureClass(valveRecommendation.recommendedPressureClass);
+                    }}
+                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0f8b8d] hover:bg-[#0d7678] text-white font-mono font-semibold text-xs transition shadow-sm"
+                  >
+                    Apply Recommended Valve: DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS}){' '}
+                    {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
+                  </button>
+                </div>
+              </div>
+
+              <div className="p-5 space-y-4">
+                {/* Readout Metrics (Dark Instrument Panel) */}
+                <div className="instrument-panel rounded-xl p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
+                  <div className="instrument-tile rounded-lg p-3">
+                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Size</span>
+                    <span className="text-base font-mono font-bold text-[#7fe0e2]">
+                      DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS})
+                    </span>
+                    <span className="block text-[10px] font-mono text-slate-400">
+                      Bore Ø{GENERIC_VALVE_SCHEDULE.find((s) => s.dn === valveRecommendation.recommendedDN)?.d_port_mm} mm
+                    </span>
+                  </div>
+
+                  <div className="instrument-tile rounded-lg p-3">
+                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Rating</span>
+                    <span className="text-base font-mono font-bold text-[#ffd77a]">
+                      {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
+                    </span>
+                    <span className="block text-[10px] font-mono text-slate-400">
+                      P_max = {valveRecommendation.maxPressureBarA.toFixed(1)} bar a @ {valveRecommendation.maxTemperatureDegC}°C
+                    </span>
+                  </div>
+
+                  <div className="instrument-tile rounded-lg p-3">
+                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Required Cv (Capacity)</span>
+                    <span className="text-base font-mono font-bold text-[#ffd77a]">
+                      {valveRecommendation.maxRequiredCv} Cv
+                    </span>
+                    <span className="block text-[10px] font-mono text-slate-400">
+                      Rated: {valveRecommendation.recommendedRatedCv} Cv ({valveRecommendation.maxPercentOpen}% open)
+                    </span>
+                  </div>
+
+                  <div className="instrument-tile rounded-lg p-3">
+                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Min Required Cv (Turndown)</span>
+                    <span className="text-base font-mono font-bold text-[#7fe0e2]">
+                      {valveRecommendation.minRequiredCv} Cv
+                    </span>
+                    <span className="block text-[10px] font-mono text-[#8be0a8] font-semibold">
+                      {valveRecommendation.minPercentOpen}% open ({valveRecommendation.turndownRatio}:1 turndown)
+                    </span>
+                  </div>
+
+                  <div className="instrument-tile rounded-lg p-3">
+                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Operating Travel Span</span>
+                    <span className="text-base font-mono font-bold text-[#8be0a8]">
+                      {valveRecommendation.minPercentOpen}% — {valveRecommendation.maxPercentOpen}%
+                    </span>
+                    <span className="block text-[10px] font-mono text-slate-400">
+                      {charConfig.type.replace(/_/g, ' ')} (Ideal 15%–85%)
+                    </span>
+                  </div>
+
+                  <div className="instrument-tile rounded-lg p-3">
+                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Predicted Noise</span>
+                    <span className="text-base font-mono font-bold text-[#7fe0e2]">
+                      {caseResults.length > 0 ? Math.max(...caseResults.map((c) => c.noiseDrilledCage_dBA)) : 0} dBA
+                    </span>
+                    <span className="block text-[10px] font-mono text-slate-400">
+                      Std trim: {caseResults.length > 0 ? Math.max(...caseResults.map((c) => c.noiseStandardTrim_dBA)) : 0} dBA
+                    </span>
+                  </div>
+                </div>
+
+                {/* Collapsible Candidate DN Size Comparison Table */}
+                {showCandidateComparison && valveRecommendation.allSizesFeasible.length > 0 && (
+                  <div className="overflow-x-auto border border-[#cfd8e3] rounded-lg">
+                    <table className="w-full text-left border-collapse text-xs font-mono">
+                      <thead>
+                        <tr className="bg-[#edf1f5] border-b border-[#cfd8e3] text-[#13315c]">
+                          <th className="py-2 px-3">Size (DN / NPS)</th>
+                          <th className="py-2 px-2">Rated Cv</th>
+                          <th className="py-2 px-2">Min % Open</th>
+                          <th className="py-2 px-2">Max % Open</th>
+                          <th className="py-2 px-2">3-Yr LCC (£)</th>
+                          <th className="py-2 px-2">Status &amp; Rationale</th>
+                          <th className="py-2 px-3 text-right">Action</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e2e8f0]">
+                        {valveRecommendation.allSizesFeasible.map((cand) => {
+                          const isCurrent = cand.dn === selectedDN;
+                          const isRec = cand.dn === valveRecommendation.recommendedDN;
+                          return (
+                            <tr
+                              key={cand.dn}
+                              className={
+                                isCurrent
+                                  ? 'bg-[#0f8b8d]/10 font-semibold'
+                                  : 'hover:bg-[#f8fafc]'
+                              }
+                            >
+                              <td className="py-2 px-3 text-[#0b2545] whitespace-nowrap">
+                                DN{cand.dn} ({cand.nps})
+                                {isRec && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 rounded bg-[#0f8b8d] text-white text-[9px]">
+                                    REC
+                                  </span>
+                                )}
+                                {isCurrent && (
+                                  <span className="ml-1.5 px-1.5 py-0.5 rounded bg-[#13315c] text-[#ffd77a] text-[9px]">
+                                    ACTIVE
+                                  </span>
+                                )}
+                              </td>
+                              <td className="py-2 px-2 text-[#0f8b8d] font-bold">{cand.ratedCv}</td>
+                              <td className="py-2 px-2">{cand.minPercentOpen}%</td>
+                              <td className="py-2 px-2">{cand.maxPercentOpen}%</td>
+                              <td className="py-2 px-2 text-slate-700">
+                                £{Math.round(cand.sibandaTotalLifeCycleCost_GBP).toLocaleString()}
+                              </td>
+                              <td className="py-2 px-2">
+                                <span
+                                  className={`mr-2 px-1.5 py-0.5 rounded text-[10px] font-bold ${
+                                    cand.isSuitable
+                                      ? 'bg-emerald-100 text-emerald-800'
+                                      : 'bg-slate-200 text-slate-700'
+                                  }`}
+                                >
+                                  {cand.isSuitable ? 'PASS' : 'OUT OF SPAN'}
+                                </span>
+                                <span className="text-[11px] text-slate-600">{cand.reason}</span>
+                              </td>
+                              <td className="py-2 px-3 text-right">
+                                <button
+                                  type="button"
+                                  onClick={() => handleSelectSizeFromSchedule(cand.dn)}
+                                  disabled={isCurrent}
+                                  className={`px-2.5 py-1 rounded text-[11px] font-semibold transition ${
+                                    isCurrent
+                                      ? 'bg-slate-200 text-slate-500 cursor-default'
+                                      : 'bg-[#13315c] hover:bg-[#0f8b8d] text-white'
+                                  }`}
+                                >
+                                  {isCurrent ? 'Active' : 'Select'}
+                                </button>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+
+                {/* Engineering Rationale bullet list */}
+                <div className="bg-[#edf1f5] rounded-lg p-3 border border-[#cfd8e3] text-xs font-mono space-y-1 text-[#0b2545]">
+                  {valveRecommendation.rationale.map((r, i) => (
+                    <div key={i} className="flex items-start gap-2">
+                      <span className="text-[#0f8b8d] font-bold">•</span>
+                      <span>{r}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+
+            {/* CARD 4: IEC 60534 SIZING, CAVITATION, VELOCITY & ACOUSTIC NOISE DIAGNOSTIC MATRIX */}
             <div className="dy-card overflow-hidden">
               <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
                 <div>
@@ -2281,317 +3477,6 @@ export default function App() {
               </div>
             </div>
 
-            {/* AUTOMATED VALVE SIZE & PRESSURE CLASS SELECTION CARD */}
-            <div className="dy-card overflow-hidden">
-              <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <div className="w-8 h-8 rounded-lg bg-[#0b2545] border border-[#f2a900]/60 flex items-center justify-center text-[#8be0a8]">
-                    <CheckCircle2 className="w-5 h-5" />
-                  </div>
-                  <div>
-                    <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                      Multi-Condition Valve Sizing & Selection Analysis
-                      <span className="px-2 py-0.5 rounded bg-[#182028] text-[#8be0a8] border border-[#2f3b47] font-mono text-[10px] font-semibold">
-                        ALL CONDITIONS ACCOMMODATED IN ONE VALVE
-                      </span>
-                    </h2>
-                    <p className="text-xs text-slate-300 font-mono">
-                      Calculates actual required Cv per condition, checks pressure & temperature limits, and selects optimal standard size on Linear trim
-                    </p>
-                  </div>
-                </div>
-
-                <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => {
-                      handleSelectSizeFromSchedule(valveRecommendation.recommendedDN);
-                      setPressureClass(valveRecommendation.recommendedPressureClass);
-                      setTrimStyle('CONTOURED_LINEAR');
-                      setCharConfig((prev) => ({ ...prev, type: 'LINEAR' }));
-                    }}
-                    className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0f8b8d] hover:bg-[#0d7678] text-white font-mono font-semibold text-xs transition shadow-sm"
-                  >
-                    Apply Recommended Valve: DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS}) {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
-                  </button>
-                </div>
-              </div>
-
-              <div className="p-5 space-y-4">
-                {/* Readout Metrics (Dark Instrument Panel) */}
-                <div className="instrument-panel rounded-xl p-3 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  <div className="instrument-tile rounded-lg p-3">
-                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Size</span>
-                    <span className="text-base font-mono font-bold text-[#7fe0e2]">
-                      DN{valveRecommendation.recommendedDN} ({valveRecommendation.recommendedNPS})
-                    </span>
-                    <span className="block text-[10px] font-mono text-slate-400">
-                      Bore Ø{GENERIC_VALVE_SCHEDULE.find((s) => s.dn === valveRecommendation.recommendedDN)?.d_port_mm} mm
-                    </span>
-                  </div>
-
-                  <div className="instrument-tile rounded-lg p-3">
-                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Suggested Rating</span>
-                    <span className="text-base font-mono font-bold text-[#ffd77a]">
-                      {PRESSURE_CLASSES[valveRecommendation.recommendedPressureClass].label.split('/')[0]}
-                    </span>
-                    <span className="block text-[10px] font-mono text-slate-400">
-                      P_max = {valveRecommendation.maxPressureBarA.toFixed(1)} bar a @ {valveRecommendation.maxTemperatureDegC}°C
-                    </span>
-                  </div>
-
-                  <div className="instrument-tile rounded-lg p-3">
-                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Required Cv (Capacity)</span>
-                    <span className="text-base font-mono font-bold text-[#ffd77a]">
-                      {valveRecommendation.maxRequiredCv} Cv
-                    </span>
-                    <span className="block text-[10px] font-mono text-slate-400">
-                      Rated: {valveRecommendation.recommendedRatedCv} Cv ({valveRecommendation.maxPercentOpen}% open)
-                    </span>
-                  </div>
-
-                  <div className="instrument-tile rounded-lg p-3">
-                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Min Required Cv (Turndown)</span>
-                    <span className="text-base font-mono font-bold text-[#7fe0e2]">
-                      {valveRecommendation.minRequiredCv} Cv
-                    </span>
-                    <span className="block text-[10px] font-mono text-[#8be0a8] font-semibold">
-                      {valveRecommendation.minPercentOpen}% open ({valveRecommendation.turndownRatio}:1 turndown)
-                    </span>
-                  </div>
-
-                  <div className="instrument-tile rounded-lg p-3">
-                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Operating Travel Span</span>
-                    <span className="text-base font-mono font-bold text-[#8be0a8]">
-                      {valveRecommendation.minPercentOpen}% — {valveRecommendation.maxPercentOpen}%
-                    </span>
-                    <span className="block text-[10px] font-mono text-slate-400">
-                      Linear Trim (Ideal 15%–85%)
-                    </span>
-                  </div>
-
-                  <div className="instrument-tile rounded-lg p-3">
-                    <span className="block text-[10px] font-mono text-slate-400 uppercase">Max Predicted Noise</span>
-                    <span className="text-base font-mono font-bold text-[#7fe0e2]">
-                      {Math.max(...caseResults.map((c) => c.noiseDrilledCage_dBA))} dBA
-                    </span>
-                    <span className="block text-[10px] font-mono text-slate-400">
-                      Std trim: {Math.max(...caseResults.map((c) => c.noiseStandardTrim_dBA))} dBA
-                    </span>
-                  </div>
-                </div>
-
-                {/* Engineering Rationale bullet list */}
-                <div className="bg-[#edf1f5] rounded-lg p-3 border border-[#cfd8e3] text-xs font-mono space-y-1 text-[#0b2545]">
-                  {valveRecommendation.rationale.map((r, i) => (
-                    <div key={i} className="flex items-start gap-2">
-                      <span className="text-[#0f8b8d] font-bold">•</span>
-                      <span>{r}</span>
-                    </div>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Top Row: Fluid Preset Loader & Piping Envelope */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              {/* Fluid Presets & Custom Dimension Overrides */}
-              <div className="lg:col-span-5 dy-card overflow-hidden">
-                <div className="section-band px-5 py-3.5">
-                  <h2 className="text-sm font-bold text-white flex items-center gap-2">
-                    <Gauge className="w-4 h-4 text-[#ffd77a]" />
-                    Process Fluid Benchmark Presets & Hardware Overrides
-                  </h2>
-                  <p className="text-xs text-slate-300 font-mono">
-                    Load standard fluid properties or customize bore/stroke/Cv
-                  </p>
-                </div>
-
-                <div className="p-5 space-y-4">
-                  <div>
-                    <label className="block text-xs font-mono text-[#13315c] font-semibold mb-1.5">
-                      Quick-Load Process Fluid Preset (Applies to All Operating Cases)
-                    </label>
-                    <select
-                      onChange={(e) => applyFluidPresetToAllCases(e.target.value)}
-                      defaultValue="BFW_185C"
-                      className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-                    >
-                      {FLUID_PRESETS.map((fp) => (
-                        <option key={fp.id} value={fp.id}>
-                          {fp.name} — [{fp.phase}]
-                        </option>
-                      ))}
-                    </select>
-                  </div>
-
-                  <div className="grid grid-cols-3 gap-3 pt-1">
-                    <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                        Custom Seat Bore (mm)
-                      </label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        placeholder={`${correlatedValve.d_port_mm}`}
-                        value={customBoreOverride ?? ''}
-                        onChange={(e) =>
-                          setCustomBoreOverride(
-                            e.target.value ? Number(e.target.value) : null
-                          )
-                        }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                        Custom Stroke H (mm)
-                      </label>
-                      <input
-                        type="number"
-                        step="1"
-                        placeholder={`${correlatedValve.stroke_mm}`}
-                        value={customStrokeOverride ?? ''}
-                        onChange={(e) =>
-                          setCustomStrokeOverride(
-                            e.target.value ? Number(e.target.value) : null
-                          )
-                        }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                      />
-                    </div>
-                    <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                        Custom Rated Cv
-                      </label>
-                      <input
-                        type="number"
-                        step="1"
-                        placeholder={`${correlatedValve.ratedCv}`}
-                        value={customRatedCvOverride ?? ''}
-                        onChange={(e) =>
-                          setCustomRatedCvOverride(
-                            e.target.value ? Number(e.target.value) : null
-                          )
-                        }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                      />
-                    </div>
-                  </div>
-                </div>
-              </div>
-
-              {/* Swaged Piping & Water-Hammer Envelope */}
-              <div className="lg:col-span-7 dy-card overflow-hidden">
-                <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h2 className="text-sm font-bold text-white">
-                      Swaged Piping Geometry (FP, FLP, xTP) & Water-Hammer Envelope
-                    </h2>
-                    <p className="text-xs text-slate-300 font-mono">
-                      Coupled concentric reducer/expander head loss & Joukowsky acoustic reflection check
-                    </p>
-                  </div>
-                  <span className="px-2.5 py-1 rounded bg-[#182028] border border-[#2f3b47] text-xs font-mono text-[#7fe0e2]">
-                    Valve d = {correlatedValve.d_mm} mm vs Pipe D1/D2 = {piping.upstreamPipeID_mm}/
-                    {piping.downstreamPipeID_mm} mm
-                  </span>
-                </div>
-
-                <div className="p-5 grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                      Upstream Pipe ID D1 (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      value={piping.upstreamPipeID_mm}
-                      onChange={(e) =>
-                        setPiping({ ...piping, upstreamPipeID_mm: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                      Downstream Pipe D2 (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="1"
-                      value={piping.downstreamPipeID_mm}
-                      onChange={(e) =>
-                        setPiping({ ...piping, downstreamPipeID_mm: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                      Pipe Wall t_p (mm)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={piping.pipeWallThickness_mm}
-                      onChange={(e) =>
-                        setPiping({ ...piping, pipeWallThickness_mm: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                      Line Length L (m)
-                    </label>
-                    <input
-                      type="number"
-                      step="5"
-                      value={piping.upstreamPipeLength_m}
-                      onChange={(e) =>
-                        setPiping({ ...piping, upstreamPipeLength_m: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                      Fast-Close Time (s)
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      value={piping.actuatorCloseTime_s}
-                      onChange={(e) =>
-                        setPiping({ ...piping, actuatorCloseTime_s: Number(e.target.value) })
-                      }
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
-                      Body Alloy Group
-                    </label>
-                    <select
-                      value={piping.bodyMaterialCategory}
-                      onChange={(e) =>
-                        setPiping({
-                          ...piping,
-                          bodyMaterialCategory: e.target.value as
-                            | 'CARBON_STEEL'
-                            | 'STAINLESS_ALLOY',
-                        })
-                      }
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-                    >
-                      <option value="STAINLESS_ALLOY">SS / Cr-Mo (≤15 m/s)</option>
-                      <option value="CARBON_STEEL">Carbon Steel (≤10.5 m/s)</option>
-                    </select>
-                  </div>
-                </div>
-              </div>
-            </div>
-
             {/* DOWNSTREAM BACKPRESSURE ORIFICE / DIFFUSER PRESSURE-SHARING CALCULATOR */}
             <div className="dy-card overflow-hidden">
               <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
@@ -2600,11 +3485,16 @@ export default function App() {
                     <Layers className="w-4 h-4" />
                   </div>
                   <div>
-                    <h2 className="text-sm font-bold text-white">
+                    <h2 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
                       Downstream Backpressure Orifice / Diffuser Pressure-Sharing Calculator (Parcol / Masoneilan)
+                      {enableBackpressureOrifice && (
+                        <span className="px-2 py-0.5 rounded bg-[#0f8b8d] text-white font-mono text-[10px] font-semibold">
+                          CLOSED-LOOP P2* ACTIVE IN SIZING
+                        </span>
+                      )}
                     </h2>
                     <p className="text-xs text-slate-300 font-mono">
-                      Raises valve outlet P2* using a downstream fixed orifice/diffuser to suppress cavitation/flashing at high flows
+                      Raises valve outlet P2* (P_mid) using a downstream fixed orifice/diffuser — actively coupled into Card 2–4 sizing, cavitation σ & noise when enabled
                     </p>
                   </div>
                 </div>
@@ -2638,7 +3528,7 @@ export default function App() {
                     />
                   </div>
                   <p className="text-xs font-mono text-slate-500 max-w-xl">
-                    Note: Orifice ΔP scales quadratically with flow (Q²). Raising P2* at high flow shifts cavitation & supersonic expansion to the static plate, whereas low-flow turndown retains ~full system ΔP on the valve.
+                    Note: Orifice ΔP scales quadratically with flow (Q²). Enabling this feeds P_mid (P2*) directly into IEC 60534 sizing above, shifting cavitation & supersonic expansion to the restriction plate while low-flow turndown retains ~full system ΔP on the valve.
                   </p>
                 </div>
 
@@ -2693,7 +3583,8 @@ export default function App() {
                             <th className="py-2 px-2">Orifice ΔP (bar)</th>
                             <th className="py-2 px-2">Interstage P_mid (bar a)</th>
                             <th className="py-2 px-2">New Valve ΔP_v* (bar)</th>
-                            <th className="py-2 px-2">Cavitation σ (Before → After)</th>
+                            <th className="py-2 px-2">Valve σ (Before → After)</th>
+                            <th className="py-2 px-2">Orifice σ / Choke Check</th>
                             <th className="py-2 px-2">Valve Noise Drop</th>
                           </tr>
                         </thead>
@@ -2710,6 +3601,22 @@ export default function App() {
                                 <span className={s.sharedCavitationResolved ? 'text-[#8be0a8] font-bold' : 'text-[#ff8a80] font-bold'}>
                                   {s.sharedSigma}
                                 </span>
+                              </td>
+                              <td className="py-2 px-2">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className={s.orificeChokedWarning ? 'text-[#ffd77a] font-bold' : 'text-[#8be0a8]'}>
+                                    σ_o={s.orificeSigma}
+                                  </span>
+                                  {s.orificeChokedWarning ? (
+                                    <span className="px-1.5 py-0.5 rounded bg-amber-950/60 border border-amber-500/40 text-[#ffd77a] text-[10px]">
+                                      WARNING: Orifice Choked/Cavitating — Consider 2-Stage Diffuser
+                                    </span>
+                                  ) : (
+                                    <span className="px-1.5 py-0.5 rounded bg-emerald-950/50 border border-emerald-500/40 text-[#8be0a8] text-[10px]">
+                                      PASS
+                                    </span>
+                                  )}
+                                </div>
                               </td>
                               <td className="py-2 px-2 text-[#8be0a8]">-{s.sharedNoiseReduction_dBA} dBA</td>
                             </tr>
@@ -2771,14 +3678,28 @@ export default function App() {
                     </select>
                   </div>
 
-                  {/* Valve Authority Pv Slider */}
+                  {/* Valve Authority Pv Slider & Auto-Sync Control */}
                   <div className="bg-[#edf1f5] border border-[#cfd8e3] rounded-lg p-3 space-y-2">
-                    <div className="flex justify-between text-xs font-mono">
+                    <div className="flex items-center justify-between gap-2 text-xs font-mono">
                       <span className="text-[#13315c] font-semibold">
-                        Valve Authority P_v = ΔP_valve(100%) / ΔP_system
+                        Valve Authority P_v = ΔP_min / ΔP_max
                       </span>
                       <span className="text-[#0f8b8d] font-bold">
-                        {charConfig.valveAuthorityPv.toFixed(2)}
+                        {effectiveCharConfig.valveAuthorityPv.toFixed(2)}
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between gap-2 text-[11px] font-mono">
+                      <label className="inline-flex items-center gap-1.5 text-[#13315c] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={autoSyncPv}
+                          onChange={(e) => setAutoSyncPv(e.target.checked)}
+                          className="rounded accent-[#0f8b8d]"
+                        />
+                        <span>Auto-Sync Pv from Process Cases</span>
+                      </label>
+                      <span className="px-1.5 py-0.5 rounded bg-white border border-[#cfd8e3] text-[#0b2545] font-semibold">
+                        System Pv = {derivedSystemPv.toFixed(2)}
                       </span>
                     </div>
                     <input
@@ -2786,17 +3707,20 @@ export default function App() {
                       min="0.05"
                       max="0.95"
                       step="0.01"
-                      value={charConfig.valveAuthorityPv}
-                      onChange={(e) =>
+                      value={effectiveCharConfig.valveAuthorityPv}
+                      onChange={(e) => {
+                        setAutoSyncPv(false);
                         setCharConfig({
                           ...charConfig,
                           valveAuthorityPv: Number(e.target.value),
-                        })
-                      }
+                        });
+                      }}
                       className="w-full accent-[#0f8b8d]"
                     />
                     <p className="text-[11px] font-mono text-slate-600">
-                      Low Pv (&lt;0.30) indicates high frictional piping loss at max flow, flattening Linear trims.
+                      {autoSyncPv
+                        ? 'Synced to active process ΔP ratio. Drag slider to override manually.'
+                        : 'Manual Pv override active. Low Pv (<0.30) flattens Linear trims.'}
                     </p>
                   </div>
 
@@ -2999,10 +3923,10 @@ export default function App() {
                   <div>
                     <h3 className="text-sm font-bold text-white">
                       Inherent Capacity φ(h) vs. Installed Loop Flow Q(h)/Q_max (at Pv ={' '}
-                      {charConfig.valveAuthorityPv.toFixed(2)})
+                      {effectiveCharConfig.valveAuthorityPv.toFixed(2)})
                     </h3>
                     <p className="text-xs text-slate-300 font-mono">
-                      Teal = Inherent Trim Curve | Mint = Installed Loop Flow | Amber Dots = Active Process Operating Cases
+                      Teal = Inherent φ(h) | Mint = Installed Flow Q(h) | Amber Dots = Process Cases (C1..Cn) on Installed Flow
                     </p>
                   </div>
                 </div>
@@ -3093,12 +4017,35 @@ export default function App() {
                           .join(' ')}
                       />
 
-                      {/* Plot Operating Cases on the Inherent Curve (#ffd77a) */}
-                      {caseResults.map((c) => {
-                        const cx = 50 + (Math.min(100, c.estimatedTravelPct) / 100) * 590;
-                        const cy = 245 - (Math.min(100, c.percentOfRatedCv) / 100) * 215;
+                      {/* Plot Operating Cases on the Installed Flow Curve (#ffd77a) */}
+                      {caseResults.map((c, idx) => {
+                        const h = Math.min(100, Math.max(0, c.estimatedTravelPct));
+                        const pts = charSimulation.points;
+                        let instFlow = h;
+                        if (pts.length > 0) {
+                          if (h <= pts[0].travelPct) {
+                            instFlow = pts[0].installedFlowPct;
+                          } else {
+                            let matched = false;
+                            for (let i = 1; i < pts.length; i++) {
+                              if (h <= pts[i].travelPct) {
+                                const p0 = pts[i - 1];
+                                const p1 = pts[i];
+                                const t = (h - p0.travelPct) / Math.max(1e-6, p1.travelPct - p0.travelPct);
+                                instFlow = p0.installedFlowPct + t * (p1.installedFlowPct - p0.installedFlowPct);
+                                matched = true;
+                                break;
+                              }
+                            }
+                            if (!matched) instFlow = pts[pts.length - 1].installedFlowPct;
+                          }
+                        }
+                        const cx = 50 + (h / 100) * 590;
+                        const cy = 245 - (Math.min(100, Math.max(0, instFlow)) / 100) * 215;
+                        const anchorEnd = h > 72;
                         return (
                           <g key={c.id}>
+                            <title>{`${c.label}: Travel ${c.estimatedTravelPct}%, Installed Flow ${instFlow.toFixed(1)}%`}</title>
                             <circle
                               cx={cx}
                               cy={cy}
@@ -3108,12 +4055,13 @@ export default function App() {
                               strokeWidth="2"
                             />
                             <text
-                              x={cx + 8}
-                              y={cy - 6}
+                              x={cx + (anchorEnd ? -8 : 8)}
+                              y={cy + (idx % 2 === 0 ? -7 : 12)}
+                              textAnchor={anchorEnd ? 'end' : 'start'}
                               fill="#ffd77a"
                               className="text-[10px] font-mono font-bold"
                             >
-                              {c.label} ({c.estimatedTravelPct}%)
+                              C{idx + 1}: {c.label} ({c.estimatedTravelPct}%)
                             </text>
                           </g>
                         );
@@ -3127,16 +4075,16 @@ export default function App() {
               <div className="dy-card overflow-hidden">
                 <div className="section-band px-5 py-3.5">
                   <h3 className="text-sm font-bold text-white">
-                    Installed Loop Gain G_installed(h) & EnTec [0.5, 2.0] Stability Envelope
+                    Installed Loop Gain G_installed(h) &amp; EnTec [0.5, 2.0] Stability Envelope
                   </h3>
                   <p className="text-xs text-slate-300 font-mono">
-                    Shaded Mint Zone = Target [0.5, 2.0] Gain Stability Band across 15%–85% Working Travel
+                    Shaded Mint = [0.5, 2.0] Band (15–85% Travel) | Emerald Dot = In-Band Case | Red/Amber Dot = Out-of-Band Case
                   </p>
                 </div>
 
                 <div className="p-4">
                   <div className="instrument-panel rounded-lg p-4">
-                    <svg viewBox="0 0 680 240" className="w-full h-56 overflow-visible">
+                    <svg viewBox="0 0 680 245" className="w-full h-56 overflow-visible">
                       {/* EnTec [0.5, 2.0] Stability Band Shaded Rectangle (Max Y = 3.0) */}
                       {(() => {
                         const yGain20 = 205 - (2.0 / 3.0) * 180;
@@ -3157,6 +4105,30 @@ export default function App() {
                           />
                         );
                       })()}
+
+                      {[0, 20, 40, 60, 80, 100].map((tTick) => {
+                        const x = 50 + (tTick / 100) * 590;
+                        return (
+                          <g key={`xt-${tTick}`}>
+                            <line
+                              x1={x}
+                              y1={25}
+                              x2={x}
+                              y2={205}
+                              stroke="#2f3b47"
+                              strokeDasharray="3 3"
+                            />
+                            <text
+                              x={x}
+                              y={224}
+                              textAnchor="middle"
+                              className="fill-slate-400 text-[10px] font-mono"
+                            >
+                              {tTick}%
+                            </text>
+                          </g>
+                        );
+                      })}
 
                       {[0, 0.5, 1.0, 1.5, 2.0, 2.5, 3.0].map((gTick) => {
                         const y = 205 - (gTick / 3.0) * 180;
@@ -3210,6 +4182,59 @@ export default function App() {
                           })
                           .join(' ')}
                       />
+
+                      {/* Plot Operating Cases on Installed Gain Curve */}
+                      {caseResults.map((c, idx) => {
+                        const h = Math.min(100, Math.max(0, c.estimatedTravelPct));
+                        const pts = charSimulation.points;
+                        let instGain = 1.0;
+                        if (pts.length > 0) {
+                          if (h <= pts[0].travelPct) {
+                            instGain = pts[0].installedGain;
+                          } else {
+                            let matched = false;
+                            for (let i = 1; i < pts.length; i++) {
+                              if (h <= pts[i].travelPct) {
+                                const p0 = pts[i - 1];
+                                const p1 = pts[i];
+                                const t = (h - p0.travelPct) / Math.max(1e-6, p1.travelPct - p0.travelPct);
+                                instGain = p0.installedGain + t * (p1.installedGain - p0.installedGain);
+                                matched = true;
+                                break;
+                              }
+                            }
+                            if (!matched) instGain = pts[pts.length - 1].installedGain;
+                          }
+                        }
+                        const inBand = instGain >= 0.5 && instGain <= 2.0;
+                        const extremeGain = instGain < 0.35 || instGain > 2.5;
+                        const markerColor = inBand ? '#8be0a8' : extremeGain ? '#ff8a80' : '#ffd77a';
+                        const cx = 50 + (h / 100) * 590;
+                        const cy = 205 - (Math.min(3.0, Math.max(0, instGain)) / 3.0) * 180;
+                        const anchorEnd = h > 75;
+                        return (
+                          <g key={`gain-${c.id}`}>
+                            <title>{`${c.label}: Travel ${c.estimatedTravelPct}%, Installed Gain = ${instGain.toFixed(2)}`}</title>
+                            <circle
+                              cx={cx}
+                              cy={cy}
+                              r="5.5"
+                              fill={markerColor}
+                              stroke="#0f1419"
+                              strokeWidth="2"
+                            />
+                            <text
+                              x={cx + (anchorEnd ? -8 : 8)}
+                              y={cy + (idx % 2 === 0 ? -7 : 12)}
+                              textAnchor={anchorEnd ? 'end' : 'start'}
+                              fill={markerColor}
+                              className="text-[10px] font-mono font-bold"
+                            >
+                              C{idx + 1} (G={instGain.toFixed(2)})
+                            </text>
+                          </g>
+                        );
+                      })}
                     </svg>
                   </div>
                 </div>
@@ -3374,7 +4399,7 @@ export default function App() {
                       </label>
                       <select
                         value={cageMaterial}
-                        onChange={(e) => setCageMaterial(e.target.value as CageMaterialId)}
+                        onChange={(e) => handleCageMaterialChange(e.target.value as CageMaterialId)}
                         className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
                       >
                         {Object.values(CAGE_MATERIALS).map((m) => (
@@ -3383,6 +4408,9 @@ export default function App() {
                           </option>
                         ))}
                       </select>
+                      <p className="text-[10px] font-mono text-slate-500 mt-1">
+                        Auto-syncs Tab 4 Cage Alloy ({THERMAL_ALLOYS[cageAlloy].name}) &amp; anti-galling check
+                      </p>
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -3449,7 +4477,7 @@ export default function App() {
                           onChange={(e) => setModulateHoleDiameter(e.target.checked)}
                           className="accent-[#0f8b8d]"
                         />
-                        Graduated Low-Lift Hole Ø Modulation
+                        Graduated Low-Lift Hole Ø (0.5 mm Drill Snap)
                       </label>
                       <label className="flex items-center gap-2 text-xs font-mono text-[#13315c] font-semibold cursor-pointer">
                         <input
@@ -3658,6 +4686,26 @@ export default function App() {
                           : cageSynthesis.saturationSeverity === 'TRIM_DEFICIT_INCREASE_HOLES'
                           ? 'Increase Hole Ø'
                           : 'Saturated - Upsize'})
+                      </span>
+                    </div>
+                    <div className="instrument-tile rounded px-2.5 py-1.5 flex justify-between">
+                      <span className="text-slate-400">Max Drill Aspect (t_cage / d_min):</span>
+                      <span
+                        className={
+                          cageSynthesis.drillManufacturabilityStatus === 'PASS'
+                            ? 'text-[#8be0a8] font-bold'
+                            : cageSynthesis.drillManufacturabilityStatus === 'WARNING'
+                            ? 'text-[#ffd77a] font-bold'
+                            : 'text-[#ff8a80] font-bold'
+                        }
+                      >
+                        {cageSynthesis.maxDrillAspectRatio}x ({cageSynthesis.drillManufacturabilityStatus})
+                      </span>
+                    </div>
+                    <div className="instrument-tile rounded px-2.5 py-1.5 flex justify-between gap-2">
+                      <span className="text-slate-400 shrink-0">Distinct CNC Drills (0.5mm):</span>
+                      <span className="text-[#7fe0e2] font-semibold text-right">
+                        {cageSynthesis.distinctDrillSizes_mm.map((d) => `Ø${d}`).join(', ')} mm ({cageSynthesis.distinctDrillSizes_mm.length})
                       </span>
                     </div>
                   </div>
@@ -4278,6 +5326,63 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Collapsible 4-Axis CNC G-Code (G83) & CAD/CAM Export Preview */}
+            <div className="dy-card overflow-hidden">
+              <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
+                <div>
+                  <h3 className="text-sm font-bold text-white flex items-center gap-2">
+                    <FileCode className="w-4 h-4 text-[#ffd77a]" />
+                    4-Axis CNC Rotary Indexer G-Code (G83 Peck) &amp; CAD/CAM Export Preview
+                  </h3>
+                  <p className="text-xs text-slate-300 font-mono">
+                    {cageSynthesis.distinctDrillSizes_mm.length} quantized drill tool(s) ({cageSynthesis.distinctDrillSizes_mm.map((d) => `Ø${d}`).join(', ')} mm) • Aspect ratio {cageSynthesis.maxDrillAspectRatio}x ({cageSynthesis.drillManufacturabilityStatus})
+                  </p>
+                </div>
+                <div className="flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={handleExportDXF}
+                    className="px-2.5 py-1.5 rounded bg-[#182028] hover:bg-[#222d38] text-[#7fe0e2] border border-[#2f3b47] text-xs font-mono font-semibold transition flex items-center gap-1"
+                  >
+                    <Download className="w-3.5 h-3.5" />
+                    .DXF
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportGCode}
+                    className="px-2.5 py-1.5 rounded bg-[#182028] hover:bg-[#222d38] text-[#8be0a8] border border-[#2f3b47] text-xs font-mono font-semibold transition flex items-center gap-1"
+                  >
+                    <FileCode className="w-3.5 h-3.5" />
+                    .NC G-Code
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleExportCSV}
+                    className="px-2.5 py-1.5 rounded bg-[#182028] hover:bg-[#222d38] text-[#ffd77a] border border-[#2f3b47] text-xs font-mono font-semibold transition flex items-center gap-1"
+                  >
+                    <Table className="w-3.5 h-3.5" />
+                    .CSV
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setShowGCodePreview((prev) => !prev)}
+                    className="px-3 py-1.5 rounded bg-[#0f8b8d] hover:bg-[#0d7678] text-white text-xs font-mono font-semibold transition flex items-center gap-1.5"
+                  >
+                    {showGCodePreview ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                    {showGCodePreview ? 'Hide G-Code Preview' : 'Preview G-Code'}
+                  </button>
+                </div>
+              </div>
+
+              {showGCodePreview && (
+                <div className="p-5">
+                  <pre className="instrument-panel rounded-lg p-4 text-[11px] font-mono text-[#8be0a8] overflow-x-auto max-h-80 leading-relaxed whitespace-pre">
+                    {generate4AxisCageGCode(cageSynthesis)}
+                  </pre>
+                </div>
+              )}
+            </div>
           </div>
         )}
 
@@ -4362,8 +5467,11 @@ export default function App() {
                       <label className="block text-slate-600 mb-1">Final Process T_∞ (°C)</label>
                       <input
                         type="number"
-                        value={finalProcessTemp_degC}
-                        onChange={(e) => setFinalProcessTemp_degC(Number(e.target.value))}
+                        value={effectiveThermalTargetTemp_degC}
+                        onChange={(e) => {
+                          setSyncThermalTempWithProcess(false);
+                          setFinalProcessTemp_degC(Number(e.target.value));
+                        }}
                         className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
                       />
                     </div>
@@ -4388,6 +5496,17 @@ export default function App() {
                       />
                     </div>
                   </div>
+
+                  <label className="flex items-center gap-2 text-xs font-mono text-[#0f8b8d] font-semibold pt-1 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      checked={syncThermalTempWithProcess}
+                      onChange={(e) => setSyncThermalTempWithProcess(e.target.checked)}
+                      className="accent-[#0f8b8d]"
+                    />
+                    <Link2 className="w-3.5 h-3.5 shrink-0" />
+                    Sync Final Temp with Process T1 ({processExtremeTemp_degC}°C)
+                  </label>
 
                   <label className="flex items-center gap-2 text-xs font-mono text-[#13315c] font-semibold pt-1 cursor-pointer">
                     <input
@@ -4435,6 +5554,15 @@ export default function App() {
                       {axialGasketAllowance_mm} mm)
                     </span>
                   </div>
+                  <div className="instrument-tile rounded px-2.5 py-2 space-y-1 border border-[#2f3b47]">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-slate-400">Trim Anti-Galling Check:</span>
+                      {renderStatusBadge(thermalResult.gallingRisk)}
+                    </div>
+                    <p className="text-[11px] text-slate-300 leading-snug">
+                      {thermalResult.gallingRationale}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
@@ -4445,31 +5573,153 @@ export default function App() {
               <div className="dy-card overflow-hidden">
                 <div className="section-band px-5 py-3.5">
                   <h3 className="text-sm font-bold text-white">
-                    Transient Radial Guide Clearance c_radial(t) & Component Thermal Lag Response
+                    Transient Thermal Lag T(t) &amp; Radial Guide Clearance c_radial(t)
                   </h3>
                   <p className="text-xs text-slate-300 font-mono">
-                    Tracks differential expansion between Austenitic/Martensitic Plug and Cage during thermal transient
+                    Top: Component Thermal Lag (T_fluid, T_cage, T_plug, T_body °C) | Bottom: Plug-to-Cage Radial Clearance (mm)
                   </p>
                 </div>
 
                 <div className="p-4">
                   <div className="instrument-panel rounded-lg p-4">
                     {(() => {
-                      const maxTime =
-                        thermalResult.timeSeries[thermalResult.timeSeries.length - 1]?.time_s || 300;
+                      const pts = thermalResult.timeSeries;
+                      const maxTime = pts[pts.length - 1]?.time_s || 600;
                       const maxClearance = Math.max(
                         0.35,
-                        ...thermalResult.timeSeries.map((p) => p.radialClearance_mm)
+                        ...pts.map((p) => p.radialClearance_mm)
                       );
+                      const tempVals = pts.flatMap((p) => [
+                        p.T_fluid_degC,
+                        p.T_cage_degC,
+                        p.T_plug_degC,
+                        p.T_body_degC,
+                      ]);
+                      const minT = Math.min(...tempVals, initialTemp_degC, effectiveThermalTargetTemp_degC);
+                      const maxT = Math.max(...tempVals, initialTemp_degC, effectiveThermalTargetTemp_degC);
+                      const spanT = Math.max(20, maxT - minT);
+                      const tTop = 26;
+                      const tBot = 132;
+                      const cTop = 166;
+                      const cBot = 294;
                       const floorY =
-                        200 -
-                        (thermalResult.minSafeRadialClearanceFloor_mm / maxClearance) * 170;
+                        cBot -
+                        (thermalResult.minSafeRadialClearanceFloor_mm / maxClearance) * (cBot - cTop);
 
                       return (
-                        <svg viewBox="0 0 680 230" className="w-full h-56 overflow-visible">
+                        <svg viewBox="0 0 680 330" className="w-full h-80 overflow-visible">
+                          {/* Temperature Subplot Legend */}
+                          <g className="text-[10px] font-mono">
+                            <line x1={55} y1={11} x2={75} y2={11} stroke="#ffd77a" strokeWidth="2" strokeDasharray="4 3" />
+                            <text x={80} y={14} fill="#ffd77a">T_fluid</text>
+                            <line x1={145} y1={11} x2={165} y2={11} stroke="#7fe0e2" strokeWidth="2.2" />
+                            <text x={170} y={14} fill="#7fe0e2">T_cage</text>
+                            <line x1={235} y1={11} x2={255} y2={11} stroke="#8be0a8" strokeWidth="2.2" />
+                            <text x={260} y={14} fill="#8be0a8">T_plug</text>
+                            <line x1={325} y1={11} x2={345} y2={11} stroke="#94a3b8" strokeWidth="2" strokeDasharray="3 3" />
+                            <text x={350} y={14} fill="#94a3b8">T_body (°C)</text>
+                          </g>
+
+                          {/* Temperature Subplot Y Grid & Ticks */}
+                          {[0, 0.5, 1.0].map((f) => {
+                            const y = tBot - f * (tBot - tTop);
+                            const tVal = Math.round(minT + f * spanT);
+                            return (
+                              <g key={`tt-${f}`}>
+                                <line x1={55} y1={y} x2={640} y2={y} stroke="#2f3b47" strokeDasharray="3 3" />
+                                <text x={48} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px] font-mono">
+                                  {tVal}°C
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* Temperature Curves */}
+                          <polyline
+                            fill="none"
+                            stroke="#ffd77a"
+                            strokeWidth="1.8"
+                            strokeDasharray="4 3"
+                            points={pts
+                              .map((p) => {
+                                const x = 55 + (p.time_s / maxTime) * 585;
+                                const y = tBot - ((p.T_fluid_degC - minT) / spanT) * (tBot - tTop);
+                                return `${x},${y}`;
+                              })
+                              .join(' ')}
+                          />
+                          <polyline
+                            fill="none"
+                            stroke="#7fe0e2"
+                            strokeWidth="2.2"
+                            points={pts
+                              .map((p) => {
+                                const x = 55 + (p.time_s / maxTime) * 585;
+                                const y = tBot - ((p.T_cage_degC - minT) / spanT) * (tBot - tTop);
+                                return `${x},${y}`;
+                              })
+                              .join(' ')}
+                          />
+                          <polyline
+                            fill="none"
+                            stroke="#8be0a8"
+                            strokeWidth="2.2"
+                            points={pts
+                              .map((p) => {
+                                const x = 55 + (p.time_s / maxTime) * 585;
+                                const y = tBot - ((p.T_plug_degC - minT) / spanT) * (tBot - tTop);
+                                return `${x},${y}`;
+                              })
+                              .join(' ')}
+                          />
+                          <polyline
+                            fill="none"
+                            stroke="#94a3b8"
+                            strokeWidth="1.8"
+                            strokeDasharray="3 3"
+                            points={pts
+                              .map((p) => {
+                                const x = 55 + (p.time_s / maxTime) * 585;
+                                const y = tBot - ((p.T_body_degC - minT) / spanT) * (tBot - tTop);
+                                return `${x},${y}`;
+                              })
+                              .join(' ')}
+                          />
+
+                          {/* Clearance Subplot Label & Y Grid/Ticks (mm) */}
+                          <text x={55} y={156} className="fill-[#7fe0e2] text-[10px] font-mono font-bold">
+                            Radial Guide Clearance c_radial(t) (mm)
+                          </text>
+                          {[0, 0.5, 1.0].map((f) => {
+                            const y = cBot - f * (cBot - cTop);
+                            const cVal = (f * maxClearance).toFixed(2);
+                            return (
+                              <g key={`ct-${f}`}>
+                                <line x1={55} y1={y} x2={640} y2={y} stroke="#2f3b47" strokeDasharray="3 3" />
+                                <text x={48} y={y + 3} textAnchor="end" className="fill-slate-400 text-[10px] font-mono">
+                                  {cVal}mm
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* Shared X-Axis Time Ticks (s) */}
+                          {[0, 0.25, 0.5, 0.75, 1.0].map((f) => {
+                            const x = 55 + f * 585;
+                            const sec = Math.round(f * maxTime);
+                            return (
+                              <g key={`xt-${f}`}>
+                                <line x1={x} y1={tTop} x2={x} y2={cBot} stroke="#2f3b47" strokeDasharray="2 4" />
+                                <text x={x} y={314} textAnchor="middle" className="fill-slate-400 text-[10px] font-mono">
+                                  {sec}s
+                                </text>
+                              </g>
+                            );
+                          })}
+
                           {/* Minimum Safe Clearance Floor Line (#ff8a80) */}
                           <line
-                            x1={50}
+                            x1={55}
                             y1={floorY}
                             x2={640}
                             y2={floorY}
@@ -4484,8 +5734,7 @@ export default function App() {
                             fill="#ff8a80"
                             className="text-[10px] font-mono font-bold"
                           >
-                            ANTI-SEIZURE CLEARANCE FLOOR ({thermalResult.minSafeRadialClearanceFloor_mm}{' '}
-                            mm)
+                            ANTI-SEIZURE CLEARANCE FLOOR ({thermalResult.minSafeRadialClearanceFloor_mm} mm)
                           </text>
 
                           {/* Radial Clearance Curve (#7fe0e2) */}
@@ -4493,12 +5742,12 @@ export default function App() {
                             fill="none"
                             stroke="#7fe0e2"
                             strokeWidth="2.6"
-                            points={thermalResult.timeSeries
+                            points={pts
                               .map((p) => {
-                                const x = 50 + (p.time_s / maxTime) * 590;
+                                const x = 55 + (p.time_s / maxTime) * 585;
                                 const y =
-                                  200 -
-                                  (Math.max(0, p.radialClearance_mm) / maxClearance) * 170;
+                                  cBot -
+                                  (Math.max(0, p.radialClearance_mm) / maxClearance) * (cBot - cTop);
                                 return `${x},${y}`;
                               })
                               .join(' ')}
@@ -4617,6 +5866,38 @@ export default function App() {
                   </div>
                 </div>
 
+                {/* Explicit Shutoff Differential Pressure Override */}
+                <div className="bg-[#edf1f5] border border-[#cfd8e3] rounded-lg p-3 space-y-1.5">
+                  <div className="flex items-center justify-between gap-2">
+                    <label className="text-[#13315c] font-semibold">
+                      Max Shutoff ΔP (bar)
+                    </label>
+                    {customShutoffDeltaP_bar !== null ? (
+                      <button
+                        type="button"
+                        onClick={() => setCustomShutoffDeltaP_bar(null)}
+                        className="px-2 py-0.5 rounded bg-[#0f8b8d] text-white text-[10px] font-semibold"
+                      >
+                        Reset Auto ({defaultShutoffDeltaP_bar} bar)
+                      </button>
+                    ) : (
+                      <span className="text-[10px] text-slate-600">
+                        Auto (Max P1 − 1.013 atm = {defaultShutoffDeltaP_bar} bar)
+                      </span>
+                    )}
+                  </div>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0.5"
+                    value={effectiveShutoffDeltaP_bar}
+                    onChange={(e) =>
+                      setCustomShutoffDeltaP_bar(e.target.value ? Number(e.target.value) : null)
+                    }
+                    className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-bold focus:border-[#0f8b8d] focus:outline-none"
+                  />
+                </div>
+
                 <div className="grid grid-cols-2 gap-3">
                   <div>
                     <label className="block text-slate-600 mb-1">
@@ -4719,6 +6000,38 @@ export default function App() {
 
             {/* Right Column: Side-by-Side Unbalanced vs Balanced Thrust & Stem Buckling Verification */}
             <div className="lg:col-span-8 space-y-6">
+              {/* Seal/Shutoff Compatibility & FTO/FTC Directional Stability Alerts */}
+              <div className="dy-card overflow-hidden">
+                <div className="p-4 space-y-2.5 text-xs font-mono">
+                  <div
+                    className={`rounded-lg p-3 border flex items-start gap-3 ${
+                      actuatorStemResult.sealShutoffCompatibilityStatus === 'CRITICAL'
+                        ? 'bg-[#ffebee] border-[#ff8a80] text-[#b71c1c]'
+                        : actuatorStemResult.sealShutoffCompatibilityStatus === 'WARNING'
+                        ? 'bg-[#fff8e1] border-[#ffe082] text-[#e65100]'
+                        : 'bg-[#edf7f1] border-[#8be0a8] text-[#0b2545]'
+                    }`}
+                  >
+                    <ShieldAlert className="w-4 h-4 shrink-0 mt-0.5" />
+                    <div className="space-y-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-bold uppercase">
+                          Balance Seal vs. Shutoff Class Compatibility
+                        </span>
+                        {renderStatusBadge(actuatorStemResult.sealShutoffCompatibilityStatus)}
+                      </div>
+                      <p className="leading-snug">
+                        {actuatorStemResult.sealShutoffCompatibilityNote}
+                      </p>
+                    </div>
+                  </div>
+                  <div className="rounded-lg p-3 bg-[#edf1f5] border border-[#cfd8e3] text-[#13315c] flex items-start gap-2.5">
+                    <Info className="w-4 h-4 shrink-0 mt-0.5 text-[#0f8b8d]" />
+                    <p className="leading-snug">{actuatorStemResult.flowDirectionStabilityNote}</p>
+                  </div>
+                </div>
+              </div>
+
               {/* Unbalanced vs Balanced Plug Force Breakdown Cards */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                 {/* Unbalanced Plug Card */}
@@ -4754,8 +6067,26 @@ export default function App() {
                         <span>Force D (Bellows / Drag):</span>
                         <span className="text-slate-100">{actuatorStemResult.unbalanced.sealAndBellowsForceD_N.toLocaleString()} N</span>
                       </div>
+                      <div className="instrument-tile rounded px-2.5 py-1.5 flex justify-between text-[11px]">
+                        <span className="text-slate-400">
+                          Seating Req ({actuatorStemResult.seatingMarginUnbalancedPct > 0 ? '+' : ''}
+                          {actuatorStemResult.seatingMarginUnbalancedPct}%):
+                        </span>
+                        <span className={actuatorStemResult.seatingMarginUnbalancedPct >= 0 ? 'text-[#8be0a8]' : 'text-[#ff8a80] font-bold'}>
+                          {actuatorStemResult.unbalanced.seatingRequiredWithMargin_N.toLocaleString()} N
+                        </span>
+                      </div>
+                      <div className="instrument-tile rounded px-2.5 py-1.5 flex justify-between text-[11px]">
+                        <span className="text-slate-400">
+                          Open-Stroke Req ({actuatorStemResult.openStrokeMarginUnbalancedPct > 0 ? '+' : ''}
+                          {actuatorStemResult.openStrokeMarginUnbalancedPct}%):
+                        </span>
+                        <span className={actuatorStemResult.openStrokeMarginUnbalancedPct >= 0 ? 'text-[#8be0a8]' : 'text-[#ff8a80] font-bold'}>
+                          {actuatorStemResult.unbalanced.openingRequiredWithMargin_N.toLocaleString()} N
+                        </span>
+                      </div>
                       <div className="border-t border-[#2f3b47] pt-2 px-1 flex justify-between font-bold text-sm text-[#ffd77a]">
-                        <span>Required Thrust (1.25x SF):</span>
+                        <span>Governing Req (1.25x SF):</span>
                         <span>{actuatorStemResult.unbalanced.totalWithSafetyMargin_N.toLocaleString()} N</span>
                       </div>
                     </div>
@@ -4795,8 +6126,26 @@ export default function App() {
                         <span>Force D (Balance Seal + Bellows):</span>
                         <span className="text-slate-100">{actuatorStemResult.balanced.sealAndBellowsForceD_N.toLocaleString()} N</span>
                       </div>
+                      <div className="instrument-tile rounded px-2.5 py-1.5 flex justify-between text-[11px]">
+                        <span className="text-slate-400">
+                          Seating Req ({actuatorStemResult.seatingMarginBalancedPct > 0 ? '+' : ''}
+                          {actuatorStemResult.seatingMarginBalancedPct}%):
+                        </span>
+                        <span className={actuatorStemResult.seatingMarginBalancedPct >= 0 ? 'text-[#8be0a8]' : 'text-[#ff8a80] font-bold'}>
+                          {actuatorStemResult.balanced.seatingRequiredWithMargin_N.toLocaleString()} N
+                        </span>
+                      </div>
+                      <div className="instrument-tile rounded px-2.5 py-1.5 flex justify-between text-[11px]">
+                        <span className="text-slate-400">
+                          Open-Stroke Req ({actuatorStemResult.openStrokeMarginBalancedPct > 0 ? '+' : ''}
+                          {actuatorStemResult.openStrokeMarginBalancedPct}%):
+                        </span>
+                        <span className={actuatorStemResult.openStrokeMarginBalancedPct >= 0 ? 'text-[#8be0a8]' : 'text-[#ff8a80] font-bold'}>
+                          {actuatorStemResult.balanced.openingRequiredWithMargin_N.toLocaleString()} N
+                        </span>
+                      </div>
                       <div className="border-t border-[#2f3b47] pt-2 px-1 flex justify-between font-bold text-sm text-[#7fe0e2]">
-                        <span>Required Thrust (1.25x SF):</span>
+                        <span>Governing Req (1.25x SF):</span>
                         <span>{actuatorStemResult.balanced.totalWithSafetyMargin_N.toLocaleString()} N</span>
                       </div>
                     </div>
@@ -4809,7 +6158,7 @@ export default function App() {
                 <div className="section-band px-5 py-3.5 flex items-center justify-between gap-2">
                   <div>
                     <h3 className="text-sm font-bold text-white">
-                      Operational Stem Diameter & Euler Column Buckling Verification
+                      Operational Stem Diameter &amp; Euler Column Buckling Verification
                     </h3>
                     <p className="text-xs text-slate-300 font-mono">
                       Evaluates thread-root tensile stress, compressive yield, and slender column buckling (SF ≥ 2.5)
@@ -4822,10 +6171,13 @@ export default function App() {
                   <div className="instrument-panel rounded-xl p-3 grid grid-cols-2 sm:grid-cols-4 gap-3 font-mono">
                     <div className="instrument-tile p-3 rounded-lg">
                       <span className="block text-[10px] text-slate-400 uppercase">
-                        Available Seating Thrust
+                        Available Thrust (Seat / Open)
                       </span>
                       <span className="text-sm font-bold text-[#7fe0e2]">
                         {actuatorStemResult.availableActuatorSeatingThrust_N.toLocaleString()} N
+                      </span>
+                      <span className="block text-[10px] text-[#8be0a8]">
+                        Open-Stroke: {actuatorStemResult.availableActuatorOpenThrust_N.toLocaleString()} N
                       </span>
                       <span className="block text-[10px] text-slate-400">
                         Rec Area: {actuatorStemResult.recommendedActuatorArea_cm2} cm²
@@ -4944,6 +6296,19 @@ export default function App() {
                 </span>
               </div>
 
+              <div className="px-5 py-2.5 bg-[#0f8b8d]/10 border-b border-[#0f8b8d]/30 flex flex-wrap items-center justify-between gap-2 text-xs font-mono text-[#0b2545]">
+                <span>
+                  <strong>Active Workbench Size:</strong>{' '}
+                  <span className="text-[#0f8b8d] font-bold">
+                    DN{selectedDN} ({GENERIC_VALVE_SCHEDULE.find((s) => s.dn === selectedDN)?.npsLabel})
+                  </span>{' '}
+                  — Clicking any schedule row below updates Tabs 1–5 globally (Size, Bore, Stroke, Cage &amp; Stem).
+                </span>
+                <span className="text-[11px] font-semibold text-[#13315c]">
+                  Rated: {correlatedValve.ratedCv} Cv • Bore Ø{correlatedValve.d_port_mm} mm • Stroke {correlatedValve.stroke_mm} mm
+                </span>
+              </div>
+
               <div className="p-5 overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead>
@@ -5034,6 +6399,7 @@ export default function App() {
                   </div>
                 </div>
               </div>
+
               <div className="p-5 overflow-x-auto">
                 <table className="w-full text-left border-collapse text-xs font-mono">
                   <thead>
@@ -5086,288 +6452,248 @@ export default function App() {
         )}
       </main>
 
-      {/* GLOBAL VALVE HARDWARE & CORRELATION BANNER (BELOW MAIN TABS) */}
-      <section className="bg-[#edf1f5] border-t border-[#cfd8e3] px-6 py-4">
-        <div className="max-w-[1600px] mx-auto space-y-4">
-          <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-3">
-            {/* Nominal Valve Size */}
-            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
-                Nominal Valve Size (DN / NPS)
-              </label>
-              <select
-                value={selectedDN}
-                onChange={(e) => handleSelectSizeFromSchedule(Number(e.target.value))}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-              >
-                {GENERIC_VALVE_SCHEDULE.map((s) => (
-                  <option key={s.dn} value={s.dn}>
-                    DN{s.dn} ({s.npsLabel}) — Bore Ø{s.d_port_mm}mm
-                  </option>
-                ))}
-              </select>
-            </div>
+      {/* ISA-20 / IEC 60534 PRINTABLE ENGINEERING DATASHEET (VISIBLE ONLY ON PRINT) */}
+      <section className="hidden print:block bg-white text-black p-6 font-mono text-[11px] space-y-5">
+        <div className="border-b-2 border-[#0b2545] pb-3 flex items-start justify-between gap-4">
+          <div>
+            <h1 className="text-base font-bold text-[#0b2545]">
+              DY-SIZE // CONTROL VALVE &amp; DRILLED CAGE ENGINEERING DATASHEET
+            </h1>
+            <p className="text-[10px] text-slate-600">
+              Software Rev {APP_VERSION} • IEC 60534-2-1 / 60534-8-3 • ISA-75 / ISA-20 • ASME B16.34 / Sec VIII Div. 1
+            </p>
+          </div>
+          <div className="grid grid-cols-2 gap-x-4 gap-y-0.5 text-[10px] text-right">
+            <span>
+              <strong>Tag No.:</strong> {projectMeta.tagNumber}
+            </span>
+            <span>
+              <strong>Rev:</strong> {projectMeta.projectRev}
+            </span>
+            <span>
+              <strong>Line / P&amp;ID:</strong> {projectMeta.lineNumber}
+            </span>
+            <span>
+              <strong>Date:</strong> {new Date().toISOString().slice(0, 10)}
+            </span>
+          </div>
+        </div>
 
-            {/* Pressure Rating Class */}
-            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
-                Pressure Class (ASME / PN)
-              </label>
-              <select
-                value={pressureClass}
-                onChange={(e) => setPressureClass(e.target.value as PressureClassId)}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-              >
-                {Object.values(PRESSURE_CLASSES).map((pc) => (
-                  <option key={pc.id} value={pc.id}>
-                    {pc.label} (K_class={pc.capacityMultiplierKClass.toFixed(2)})
-                  </option>
-                ))}
-              </select>
-            </div>
+        <div className="border border-slate-400 px-3 py-1.5 text-[11px]">
+          <strong>Service Description:</strong> {projectMeta.serviceDescription}
+        </div>
 
-            {/* Generic Trim Family */}
-            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
-                Generic Trim Style & Stages
-              </label>
-              <select
-                value={trimStyle}
-                onChange={(e) => setTrimStyle(e.target.value as TrimStyleId)}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-              >
-                {Object.values(TRIM_STYLES).map((ts) => (
-                  <option key={ts.id} value={ts.id}>
-                    {ts.shortName} (Cd≈{ts.cdSpecificCapacity})
-                  </option>
-                ))}
-              </select>
-            </div>
+        {/* SECTION A: MULTI-CONDITION PROCESS SIZING & ACOUSTICS */}
+        <div className="space-y-1.5">
+          <h2 className="text-xs font-bold uppercase bg-slate-200 px-2 py-1 border border-slate-400">
+            Section A — Multi-Condition Process Operating Cases, Cavitation &amp; Noise (IEC 60534)
+          </h2>
+          <table className="w-full border-collapse border border-slate-400 text-[10px]">
+            <thead>
+              <tr className="bg-slate-100">
+                <th className="border border-slate-400 px-2 py-1 text-left">Case</th>
+                <th className="border border-slate-400 px-2 py-1 text-left">Phase</th>
+                <th className="border border-slate-400 px-2 py-1 text-right">
+                  Flow ({processUnits.flowRate})
+                </th>
+                <th className="border border-slate-400 px-2 py-1 text-right">
+                  P1 / P2* ({processUnits.P1})
+                </th>
+                <th className="border border-slate-400 px-2 py-1 text-right">
+                  T1 ({processUnits.T1})
+                </th>
+                <th className="border border-slate-400 px-2 py-1 text-right">Req Cv (Kv)</th>
+                <th className="border border-slate-400 px-2 py-1 text-right">% Open</th>
+                <th className="border border-slate-400 px-2 py-1 text-right">Noise (Std→Cage)</th>
+                <th className="border border-slate-400 px-2 py-1 text-left">Regime / Status</th>
+              </tr>
+            </thead>
+            <tbody>
+              {caseResults.map((r) => {
+                const effCase = effectiveOperatingCases.find((c) => c.id === r.id);
+                const dispFlow = effCase
+                  ? Number(fromInternalFlow(effCase.flowRate, processUnits.flowRate, effCase.fluidPhase).toFixed(2))
+                  : 0;
+                const dispP1 = effCase
+                  ? Number(fromInternalPressure(effCase.P1_bar_a, processUnits.P1).toFixed(2))
+                  : 0;
+                const dispP2 = effCase
+                  ? Number(fromInternalPressure(effCase.P2_bar_a, processUnits.P1).toFixed(2))
+                  : 0;
+                const dispT1 = effCase
+                  ? Number(fromInternalTemperature(effCase.T1_degC, processUnits.T1).toFixed(1))
+                  : 0;
+                return (
+                  <tr key={r.id}>
+                    <td className="border border-slate-400 px-2 py-1 font-bold">{r.label}</td>
+                    <td className="border border-slate-400 px-2 py-1">{r.fluidPhase}</td>
+                    <td className="border border-slate-400 px-2 py-1 text-right">{dispFlow}</td>
+                    <td className="border border-slate-400 px-2 py-1 text-right">
+                      {dispP1} / {dispP2}
+                    </td>
+                    <td className="border border-slate-400 px-2 py-1 text-right">{dispT1}</td>
+                    <td className="border border-slate-400 px-2 py-1 text-right font-bold">
+                      {r.requiredCv} ({r.requiredKv})
+                    </td>
+                    <td className="border border-slate-400 px-2 py-1 text-right">
+                      {r.estimatedTravelPct}%
+                    </td>
+                    <td className="border border-slate-400 px-2 py-1 text-right">
+                      {r.noiseStandardTrim_dBA}→{r.noiseDrilledCage_dBA} dBA
+                    </td>
+                    <td className="border border-slate-400 px-2 py-1">
+                      [{r.regimeSeverity}] {r.regimeLabel}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+          {enableBackpressureOrifice && backpressureOrificeResult && (
+            <p className="text-[10px]">
+              <strong>Backpressure Orifice Coupled:</strong> Orifice Cv = {backpressureOrificeResult.orificeRatedCv} | Equiv Bore Ø
+              {backpressureOrificeResult.equivalentOrificeBore_mm} mm | Governing ΔP ={' '}
+              {backpressureOrificeResult.orificeDeltaPAtMax_bar} bar ({backpressureOrificeResult.designMaxCaseLabel})
+            </p>
+          )}
+        </div>
 
-            {/* Reduced Trim Capacity Step */}
-            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
-                Trim Capacity Factor (R5 Series)
-              </label>
-              <select
-                value={reducedTrimFactor}
-                onChange={(e) => {
-                  setReducedTrimFactor(Number(e.target.value));
-                  setCustomBoreOverride(null);
-                  setCustomRatedCvOverride(null);
-                }}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-              >
-                {REDUCED_TRIM_FACTORS.map((rf) => (
-                  <option key={rf.factor} value={rf.factor}>
-                    {rf.label}
-                  </option>
-                ))}
-              </select>
-            </div>
-
-            {/* Body Pattern & Flow Direction */}
-            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
-                Body Style & Flow Direction
-              </label>
-              <div className="grid grid-cols-2 gap-1.5">
-                <select
-                  value={bodyStyle}
-                  onChange={(e) => setBodyStyle(e.target.value as BodyStyleId)}
-                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                >
-                  <option value="GLOBE_STRAIGHT">Globe (1.0x)</option>
-                  <option value="ANGLE_BODY">Angle (1.12x)</option>
-                </select>
-                <select
-                  value={flowDirection}
-                  onChange={(e) => setFlowDirection(e.target.value as FlowDirectionId)}
-                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
-                >
-                  <option value="FTC">FTC (Over)</option>
-                  <option value="FTO">FTO (Under)</option>
-                </select>
-              </div>
-            </div>
-
-            {/* Stroke Mode (Standard vs Extended) */}
-            <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
-                Stroke Schedule (H)
-              </label>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => {
-                    setUseExtendedStroke(false);
-                    setCustomStrokeOverride(null);
-                  }}
-                  className={`flex-1 py-1.5 px-2 rounded text-xs font-mono border transition ${
-                    !useExtendedStroke
-                      ? 'bg-[#0f8b8d] text-white border-[#0f8b8d] font-semibold'
-                      : 'bg-white text-[#13315c] border-[#cfd8e3] hover:bg-[#edf1f5]'
-                  }`}
-                >
-                  Std ({correlatedValve.stroke_mm}mm)
-                </button>
-                <button
-                  onClick={() => {
-                    setUseExtendedStroke(true);
-                    setCustomStrokeOverride(null);
-                  }}
-                  className={`flex-1 py-1.5 px-2 rounded text-xs font-mono border transition ${
-                    useExtendedStroke
-                      ? 'bg-[#0f8b8d] text-white border-[#0f8b8d] font-semibold'
-                      : 'bg-white text-[#13315c] border-[#cfd8e3] hover:bg-[#edf1f5]'
-                  }`}
-                >
-                  Ext Stroke
-                </button>
-              </div>
-            </div>
+        {/* SECTION B: HARDWARE CORRELATION, PIPING & CHARACTERISTIC */}
+        <div className="grid grid-cols-2 gap-4">
+          <div className="space-y-1">
+            <h2 className="text-xs font-bold uppercase bg-slate-200 px-2 py-1 border border-slate-400">
+              Section B — Valve Body, Piping &amp; Characteristic
+            </h2>
+            <table className="w-full border-collapse border border-slate-400 text-[10px]">
+              <tbody>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Nominal Size / Rating</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    DN{selectedDN} ({GENERIC_VALVE_SCHEDULE.find((s) => s.dn === selectedDN)?.npsLabel}) /{' '}
+                    {PRESSURE_CLASSES[pressureClass].label}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Body / Trim / Flow</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {bodyStyle} / {TRIM_STYLES[trimStyle].shortName} / {flowDirection}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Rated Capacity / Bore / Stroke</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {correlatedValve.ratedCv} Cv ({correlatedValve.ratedKv} Kv) | Ø{correlatedValve.d_port_mm} mm | {correlatedValve.stroke_mm} mm
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">FL / Kc / xT / Fd</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {correlatedValve.FL} / {correlatedValve.Kc} / {correlatedValve.xT} / {cageSynthesis.styleModifierFd}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Piping (D1 / D2 / Wall)</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {piping.upstreamPipeID_mm} / {piping.downstreamPipeID_mm} mm (t={piping.pipeWallThickness_mm} mm) • {piping.bodyMaterialCategory}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Characteristic &amp; Authority</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {effectiveCharConfig.type} (Pv={effectiveCharConfig.valveAuthorityPv.toFixed(2)}) • EnTec Band {charSimulation.stabilityBandCoveragePct}% • Ratio {charSimulation.gainRatioWorkingSpan}:1
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
 
-          {/* LIVE CORRELATED HARDWARE KPI READOUT STRIP (DARK INSTRUMENT PANEL) */}
-          <div className="instrument-panel rounded-xl p-2.5 grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-8 gap-2.5">
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                Correlated Rated Cv / Kv
-              </span>
-              <span className="text-sm font-mono font-bold text-[#7fe0e2]">
-                {correlatedValve.ratedCv} Cv{' '}
-                <span className="text-xs text-slate-400 font-normal">
-                  ({correlatedValve.ratedKv} Kv)
-                </span>
-              </span>
-            </div>
-
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                Specific Capacity Cd (Cv/d²)
-              </span>
-              <span className="text-sm font-mono font-bold text-[#ffd77a]">
-                {correlatedValve.effectiveCd}{' '}
-                <span className="text-xs text-slate-400 font-normal">Cv/in²</span>
-              </span>
-            </div>
-
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                Seat Port Bore Ød_port
-              </span>
-              <span className="text-sm font-mono font-bold text-[#7fe0e2]">
-                {correlatedValve.d_port_mm} mm{' '}
-                <span className="text-xs text-slate-400 font-normal">
-                  ({correlatedValve.d_port_in}")
-                </span>
-              </span>
-            </div>
-
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                Rated Stroke H (Curtain Ratio)
-              </span>
-              <span className="text-sm font-mono font-bold text-[#ffd77a]">
-                {correlatedValve.stroke_mm} mm{' '}
-                <span className="text-xs text-[#7fe0e2] font-normal">
-                  ({correlatedValve.curtainToSeatAreaRatio}x Seat)
-                </span>
-              </span>
-            </div>
-
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                Series Cv (Trim / Seat / Body)
-              </span>
-              <span className="text-xs font-mono font-semibold text-slate-200">
-                {correlatedValve.cvTrimComponent} / {correlatedValve.cvSeatComponent} /{' '}
-                {correlatedValve.cvBodyComponent}
-              </span>
-            </div>
-
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                Recovery Factors (FL / Kc / xT)
-              </span>
-              <span className="text-sm font-mono font-bold text-[#8be0a8]">
-                {correlatedValve.FL} / {correlatedValve.Kc} / {correlatedValve.xT}
-              </span>
-            </div>
-
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                ASME Min Body Wall t_body
-              </span>
-              <span className="text-sm font-mono font-bold text-[#ffd77a]">
-                {correlatedValve.bodyMinWall_mm} mm
-              </span>
-            </div>
-
-            <div className="instrument-tile rounded-lg px-3 py-2">
-              <span className="block text-[10px] font-mono text-slate-400 uppercase">
-                Synthesized Cage Orifices
-              </span>
-              <span className="text-sm font-mono font-bold text-[#7fe0e2]">
-                {cageSynthesis.totalHoles} holes{' '}
-                <span className="text-xs text-slate-400 font-normal">
-                  (Ø{cageSynthesis.meanHoleDia_mm}mm)
-                </span>
-              </span>
-            </div>
+          {/* SECTION C: DRILLED CAGE & ASME STRUCTURAL */}
+          <div className="space-y-1">
+            <h2 className="text-xs font-bold uppercase bg-slate-200 px-2 py-1 border border-slate-400">
+              Section C — Drilled Cage Synthesis &amp; ASME Stress
+            </h2>
+            <table className="w-full border-collapse border border-slate-400 text-[10px]">
+              <tbody>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Cage Material / NACE</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {CAGE_MATERIALS[cageMaterial].name} | NACE MR0175: {requireNaceSourService ? 'YES' : 'NO'}
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Perforations / Drills</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {cageSynthesis.totalHoles} holes across {cageSynthesis.rows.length} rows | Drills: {cageSynthesis.distinctDrillSizes_mm.map((d) => `Ø${d}`).join(', ')} mm
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Drill Aspect Ratio</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {cageSynthesis.maxDrillAspectRatio}x [{cageSynthesis.drillManufacturabilityStatus}]
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Min Ligament / Efficiency</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    w_min={cageSynthesis.minLigamentWidth_mm} mm (η={(cageSynthesis.minLigamentEfficiency * 100).toFixed(1)}%)
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Cage Wall / Hoop Stress</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    t={cageSynthesis.selectedWallThickness_mm} mm (min {cageSynthesis.minRequiredWallThickness_mm} mm) | σ={cageSynthesis.hoopStress_MPa}/{cageSynthesis.allowableStressSm_MPa} MPa [{cageSynthesis.structuralStatus}]
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Continuity / Deadband</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    Deadband {cageSynthesis.deadbandStrokePct}% (Mean overlap {cageSynthesis.meanRowOverlapPct}%)
+                  </td>
+                </tr>
+              </tbody>
+            </table>
           </div>
+        </div>
 
-          {/* SEGMENTED WORKBENCH MODE SWITCHER */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-[#cfd8e3] shadow-sm no-print">
-            {[
-              {
-                id: 'PROCESS_SIZING',
-                label: '1. Multi-Condition Sizing & Noise (IEC 60534)',
-                icon: Activity,
-              },
-              {
-                id: 'CHARACTERISTICS',
-                label: '2. Inherent, Custom & Installed Gain (Pv)',
-                icon: Sliders,
-              },
-              {
-                id: 'CAGE_CAD_STRESS',
-                label: '3. Drilled Cage Synthesis, Hoop Stress & CAD/CAM',
-                icon: Layers,
-              },
-              {
-                id: 'TRANSIENT_THERMAL',
-                label: '4. Transient Thermal Binding & Bonnet Advisor',
-                icon: Thermometer,
-              },
-              {
-                id: 'ACTUATOR_STEM',
-                label: '5. Balanced/Unbalanced Thrust & Stem Sizing',
-                icon: Wrench,
-              },
-              {
-                id: 'MASTER_SCHEDULE',
-                label: '6. Generic Valve Correlation & Master Table',
-                icon: Table,
-              },
-            ].map((tab) => {
-              const Icon = tab.icon;
-              const isActive = activeTab === tab.id;
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => setActiveTab(tab.id as ActiveTabId)}
-                  className={`flex items-center gap-2 px-3.5 py-2 rounded-lg text-xs font-mono transition ${
-                    isActive
-                      ? 'bg-[#0f8b8d] text-white font-semibold shadow-sm'
-                      : 'text-[#13315c] hover:text-[#0b2545] hover:bg-[#edf1f5]'
-                  }`}
-                >
-                  <Icon className="w-3.5 h-3.5" />
-                  {tab.label}
-                </button>
-              );
-            })}
-          </div>
+        {/* SECTION D: TRANSIENT THERMAL, ACTUATOR & STEM SIZING */}
+        <div className="space-y-1">
+          <h2 className="text-xs font-bold uppercase bg-slate-200 px-2 py-1 border border-slate-400">
+            Section D — Thermal Binding, Anti-Galling, Bonnet &amp; Actuator / Stem Verification
+          </h2>
+          <table className="w-full border-collapse border border-slate-400 text-[10px]">
+            <tbody>
+              <tr>
+                <td className="border border-slate-400 px-2 py-1 font-bold w-1/4">Trim/Body Alloys</td>
+                <td className="border border-slate-400 px-2 py-1 w-1/4">
+                  Plug: {THERMAL_ALLOYS[plugAlloy].name} | Cage: {THERMAL_ALLOYS[cageAlloy].name} | Body: {THERMAL_ALLOYS[bodyAlloy].name}
+                </td>
+                <td className="border border-slate-400 px-2 py-1 font-bold w-1/4">Shutoff / Flow / Seal</td>
+                <td className="border border-slate-400 px-2 py-1 w-1/4">
+                  {shutoffClass} | {flowDirection} | {balanceSealType} [{actuatorStemResult.sealShutoffCompatibilityStatus}]
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-400 px-2 py-1 font-bold">Transient Clearance &amp; Risks</td>
+                <td className="border border-slate-400 px-2 py-1">
+                  Min c_rad={thermalResult.minTransientRadialClearance_mm} mm (Floor {thermalResult.minSafeRadialClearanceFloor_mm} mm @ {effectiveThermalTargetTemp_degC}°C) | Radial [{thermalResult.radialBindingRisk}], Galling [{thermalResult.gallingRisk}]
+                </td>
+                <td className="border border-slate-400 px-2 py-1 font-bold">Actuator Thrust Margins</td>
+                <td className="border border-slate-400 px-2 py-1">
+                  ΔP_shutoff={effectiveShutoffDeltaP_bar} bar | Unbal: {actuatorStemResult.actuatorMarginUnbalancedPct}% | Bal: {actuatorStemResult.actuatorMarginBalancedPct}% (Seat {actuatorStemResult.seatingMarginBalancedPct}% / Open {actuatorStemResult.openStrokeMarginBalancedPct}%)
+                </td>
+              </tr>
+              <tr>
+                <td className="border border-slate-400 px-2 py-1 font-bold">Bonnet &amp; Packing Advisor</td>
+                <td className="border border-slate-400 px-2 py-1">
+                  {thermalResult.bonnetAdvisor.bonnetTitle} | {thermalResult.bonnetAdvisor.recommendedPackingSystem} (Box ~{thermalResult.bonnetAdvisor.estimatedPackingBoxTemp_degC}°C)
+                </td>
+                <td className="border border-slate-400 px-2 py-1 font-bold">Stem &amp; Column Buckling</td>
+                <td className="border border-slate-400 px-2 py-1">
+                  {STEM_MATERIALS[stemMaterial].name} Ø{selectedStemDia_mm} mm (L={unsupportedStemLength_mm} mm) | SF={actuatorStemResult.bucklingSafetyFactor}x [{actuatorStemResult.stemStructuralStatus}]
+                </td>
+              </tr>
+            </tbody>
+          </table>
         </div>
       </section>
     </div>
