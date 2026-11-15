@@ -1,4 +1,4 @@
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useRef, useEffect } from 'react';
 import {
   Activity,
   Sliders,
@@ -19,7 +19,33 @@ import {
   Volume2,
   Wrench,
   Info,
+  ChevronDown,
+  Upload,
+  Save,
+  Globe,
 } from 'lucide-react';
+
+import {
+  GeneralUnitSystem,
+  ProcessUnitsState,
+  DEFAULT_METRIC_UNITS,
+  DEFAULT_ENGLISH_UNITS,
+  fromInternalFlow,
+  toInternalFlow,
+  fromInternalPressure,
+  toInternalPressure,
+  fromInternalTemperature,
+  toInternalTemperature,
+  fromInternalDensity,
+  toInternalDensity,
+  fromInternalViscosity,
+  toInternalViscosity,
+  FlowUnit,
+  PressureUnit,
+  TemperatureUnit,
+  DensityUnit,
+  ViscosityUnit,
+} from './engine/unitConversions';
 
 import {
   PRESSURE_CLASSES,
@@ -91,6 +117,32 @@ type ActiveTabId =
 
 export default function App() {
   const [activeTab, setActiveTab] = useState<ActiveTabId>('PROCESS_SIZING');
+
+  // General Unit System ('METRIC' | 'ENGLISH') and granular row-level process unit selections
+  const [unitSystem, setUnitSystem] = useState<GeneralUnitSystem>('METRIC');
+  const [processUnits, setProcessUnits] = useState<ProcessUnitsState>(DEFAULT_METRIC_UNITS);
+
+  // Tools menu dropdown toggle
+  const [isToolsMenuOpen, setIsToolsMenuOpen] = useState<boolean>(false);
+  const toolsMenuRef = useRef<HTMLDivElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Close tools menu on outside click
+  useEffect(() => {
+    const handleOutsideClick = (event: MouseEvent) => {
+      if (toolsMenuRef.current && !toolsMenuRef.current.contains(event.target as Node)) {
+        setIsToolsMenuOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  // When general unit system changes, switch default row units accordingly
+  const handleUnitSystemChange = (newSystem: GeneralUnitSystem) => {
+    setUnitSystem(newSystem);
+    setProcessUnits(newSystem === 'METRIC' ? { ...DEFAULT_METRIC_UNITS } : { ...DEFAULT_ENGLISH_UNITS });
+  };
 
   // 1. Global Manufacturer-Agnostic Valve Configuration State
   const [selectedDN, setSelectedDN] = useState<number>(80); // DN80 (3") default
@@ -603,6 +655,158 @@ export default function App() {
     );
   };
 
+  // --- SAVE & LOAD .DYSol PROJECT FILES ---
+  const handleSaveDYSol = () => {
+    const projectData = {
+      fileType: 'DYSol',
+      version: '2.0.0',
+      timestamp: new Date().toISOString(),
+      unitSystem,
+      processUnits,
+      inputs: {
+        selectedDN,
+        pressureClass,
+        bodyStyle,
+        trimStyle,
+        flowDirection,
+        reducedTrimFactor,
+        useExtendedStroke,
+        customBoreOverride,
+        customStrokeOverride,
+        customRatedCvOverride,
+        enableBackpressureOrifice,
+        orificeDeltaPSharePct,
+        piping,
+        operatingCases,
+        charConfig,
+        numRows,
+        baseHoleDia_mm,
+        modulateHoleDiameter,
+        enforceZeroDeadbandOverlap,
+        targetRowOverlapPct,
+        holeSpacingRule,
+        showSibandaGalleryHeatmap,
+        selectedWallThickness_mm,
+        erosionAllowance_mm,
+        cageMaterial,
+        requireNaceSourService,
+        livePlugTravelPct,
+        coldRadialClearance_mm,
+        axialGasketAllowance_mm,
+        plugAlloy,
+        cageAlloy,
+        bodyAlloy,
+        initialTemp_degC,
+        finalProcessTemp_degC,
+        rampRate_degC_per_min,
+        convectiveH_W_m2K,
+        requireLethalBellowsSeal,
+        selectedStemDia_mm,
+        unsupportedStemLength_mm,
+        shutoffClass,
+        packingType,
+        balanceSealType,
+        failAction,
+        actuatorArea_cm2,
+        airSupply_bar_g,
+        benchSetLower_bar_g,
+        benchSetUpper_bar_g,
+        stemMaterial,
+      },
+      outputs: {
+        correlatedValve,
+        caseResults,
+        valveRecommendation,
+        charSimulation,
+        cageSynthesis,
+        thermalResult,
+        actuatorStemResult,
+        backpressureOrificeResult,
+      },
+    };
+
+    const jsonStr = JSON.stringify(projectData, null, 2);
+    downloadTextFile(`DY_SIZE_DN${selectedDN}_VALVE_CASE.DYSol`, jsonStr, 'application/json');
+  };
+
+  const handleLoadDYSolClick = () => {
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+      fileInputRef.current.click();
+    }
+  };
+
+  const handleFileChange = (e: any) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const text = event.target?.result as string;
+        const data = JSON.parse(text);
+
+        if (data.unitSystem) setUnitSystem(data.unitSystem);
+        if (data.processUnits) setProcessUnits(data.processUnits);
+
+        const inp = data.inputs || data;
+        if (inp.selectedDN !== undefined) setSelectedDN(inp.selectedDN);
+        if (inp.pressureClass !== undefined) setPressureClass(inp.pressureClass);
+        if (inp.bodyStyle !== undefined) setBodyStyle(inp.bodyStyle);
+        if (inp.trimStyle !== undefined) setTrimStyle(inp.trimStyle);
+        if (inp.flowDirection !== undefined) setFlowDirection(inp.flowDirection);
+        if (inp.reducedTrimFactor !== undefined) setReducedTrimFactor(inp.reducedTrimFactor);
+        if (inp.useExtendedStroke !== undefined) setUseExtendedStroke(inp.useExtendedStroke);
+        if (inp.customBoreOverride !== undefined) setCustomBoreOverride(inp.customBoreOverride);
+        if (inp.customStrokeOverride !== undefined) setCustomStrokeOverride(inp.customStrokeOverride);
+        if (inp.customRatedCvOverride !== undefined) setCustomRatedCvOverride(inp.customRatedCvOverride);
+        if (inp.enableBackpressureOrifice !== undefined) setEnableBackpressureOrifice(inp.enableBackpressureOrifice);
+        if (inp.orificeDeltaPSharePct !== undefined) setOrificeDeltaPSharePct(inp.orificeDeltaPSharePct);
+        if (inp.piping) setPiping(inp.piping);
+        if (Array.isArray(inp.operatingCases)) setOperatingCases(inp.operatingCases);
+        if (inp.charConfig) setCharConfig(inp.charConfig);
+        if (inp.numRows !== undefined) setNumRows(inp.numRows);
+        if (inp.baseHoleDia_mm !== undefined) setBaseHoleDia_mm(inp.baseHoleDia_mm);
+        if (inp.modulateHoleDiameter !== undefined) setModulateHoleDiameter(inp.modulateHoleDiameter);
+        if (inp.enforceZeroDeadbandOverlap !== undefined) setEnforceZeroDeadbandOverlap(inp.enforceZeroDeadbandOverlap);
+        if (inp.targetRowOverlapPct !== undefined) setTargetRowOverlapPct(inp.targetRowOverlapPct);
+        if (inp.holeSpacingRule !== undefined) setHoleSpacingRule(inp.holeSpacingRule);
+        if (inp.showSibandaGalleryHeatmap !== undefined) setShowSibandaGalleryHeatmap(inp.showSibandaGalleryHeatmap);
+        if (inp.selectedWallThickness_mm !== undefined) setSelectedWallThickness_mm(inp.selectedWallThickness_mm);
+        if (inp.erosionAllowance_mm !== undefined) setErosionAllowance_mm(inp.erosionAllowance_mm);
+        if (inp.cageMaterial !== undefined) setCageMaterial(inp.cageMaterial);
+        if (inp.requireNaceSourService !== undefined) setRequireNaceSourService(inp.requireNaceSourService);
+        if (inp.livePlugTravelPct !== undefined) setLivePlugTravelPct(inp.livePlugTravelPct);
+        if (inp.coldRadialClearance_mm !== undefined) setColdRadialClearance_mm(inp.coldRadialClearance_mm);
+        if (inp.axialGasketAllowance_mm !== undefined) setAxialGasketAllowance_mm(inp.axialGasketAllowance_mm);
+        if (inp.plugAlloy !== undefined) setPlugAlloy(inp.plugAlloy);
+        if (inp.cageAlloy !== undefined) setCageAlloy(inp.cageAlloy);
+        if (inp.bodyAlloy !== undefined) setBodyAlloy(inp.bodyAlloy);
+        if (inp.initialTemp_degC !== undefined) setInitialTemp_degC(inp.initialTemp_degC);
+        if (inp.finalProcessTemp_degC !== undefined) setFinalProcessTemp_degC(inp.finalProcessTemp_degC);
+        if (inp.rampRate_degC_per_min !== undefined) setRampRate_degC_per_min(inp.rampRate_degC_per_min);
+        if (inp.convectiveH_W_m2K !== undefined) setConvectiveH_W_m2K(inp.convectiveH_W_m2K);
+        if (inp.requireLethalBellowsSeal !== undefined) setRequireLethalBellowsSeal(inp.requireLethalBellowsSeal);
+        if (inp.selectedStemDia_mm !== undefined) setSelectedStemDia_mm(inp.selectedStemDia_mm);
+        if (inp.unsupportedStemLength_mm !== undefined) setUnsupportedStemLength_mm(inp.unsupportedStemLength_mm);
+        if (inp.shutoffClass !== undefined) setShutoffClass(inp.shutoffClass);
+        if (inp.packingType !== undefined) setPackingType(inp.packingType);
+        if (inp.balanceSealType !== undefined) setBalanceSealType(inp.balanceSealType);
+        if (inp.failAction !== undefined) setFailAction(inp.failAction);
+        if (inp.actuatorArea_cm2 !== undefined) setActuatorArea_cm2(inp.actuatorArea_cm2);
+        if (inp.airSupply_bar_g !== undefined) setAirSupply_bar_g(inp.airSupply_bar_g);
+        if (inp.benchSetLower_bar_g !== undefined) setBenchSetLower_bar_g(inp.benchSetLower_bar_g);
+        if (inp.benchSetUpper_bar_g !== undefined) setBenchSetUpper_bar_g(inp.benchSetUpper_bar_g);
+        if (inp.stemMaterial !== undefined) setStemMaterial(inp.stemMaterial);
+
+        alert(`Successfully loaded project file: ${file.name}`);
+      } catch (err: any) {
+        alert(`Failed to load .DYSol file: ${err?.message || err}`);
+      }
+    };
+    reader.readAsText(file);
+  };
+
   const renderStatusBadge = (status: 'PASS' | 'WARNING' | 'CRITICAL', text?: string) => {
     if (status === 'PASS') {
       return (
@@ -652,38 +856,167 @@ export default function App() {
             </div>
           </div>
 
-          {/* EXPORT & ACTION TOOLBAR */}
-          <div className="flex items-center gap-2">
-            <button
-              onClick={handleExportDXF}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#13315c] hover:bg-[#0f8b8d] text-white border border-[#0f8b8d]/70 text-xs font-mono transition"
-              title="Download 2D Unrolled Cage Perforation AutoCAD .DXF"
-            >
-              <Download className="w-3.5 h-3.5 text-[#7fe0e2]" />
-              .DXF CAD
-            </button>
-            <button
-              onClick={handleExportGCode}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#13315c] hover:bg-[#0f8b8d] text-white border border-[#0f8b8d]/70 text-xs font-mono transition"
-              title="Download 4-Axis Rotary Indexer CNC .NC G-Code"
-            >
-              <FileCode className="w-3.5 h-3.5 text-[#8be0a8]" />
-              4-AXIS G-CODE
-            </button>
-            <button
-              onClick={handleExportCSV}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#13315c] hover:bg-[#0f8b8d] text-white border border-[#0f8b8d]/70 text-xs font-mono transition"
-            >
-              <Table className="w-3.5 h-3.5 text-[#ffd77a]" />
-              .CSV SCHEDULE
-            </button>
-            <button
-              onClick={() => window.print()}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-[#0f8b8d] hover:bg-[#0d7678] text-white font-semibold text-xs font-mono shadow-sm transition"
-            >
-              <Printer className="w-3.5 h-3.5" />
-              PRINT DATASHEET
-            </button>
+          {/* TOP RIGHT TOOLBAR: GENERAL UNIT SYSTEM & TOOLS MENU */}
+          <div className="flex items-center gap-3">
+            {/* Hidden file input for loading .DYSol */}
+            <input
+              type="file"
+              ref={fileInputRef}
+              onChange={handleFileChange}
+              accept=".dysol,.json"
+              className="hidden"
+            />
+
+            {/* General Unit System Selection (Metric vs English) */}
+            <div className="flex items-center bg-[#13315c] p-1 rounded-lg border border-[#f2a900]/40 text-xs font-mono">
+              <span className="text-slate-300 px-2 flex items-center gap-1">
+                <Globe className="w-3.5 h-3.5 text-[#ffd77a]" />
+                Units:
+              </span>
+              <button
+                type="button"
+                onClick={() => handleUnitSystemChange('METRIC')}
+                className={`px-2.5 py-1 rounded font-semibold transition ${
+                  unitSystem === 'METRIC'
+                    ? 'bg-[#0f8b8d] text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
+                }`}
+                title="Switch all default process rows to Metric (m³/h, bar a, °C, kg/m³)"
+              >
+                Metric
+              </button>
+              <button
+                type="button"
+                onClick={() => handleUnitSystemChange('ENGLISH')}
+                className={`px-2.5 py-1 rounded font-semibold transition ${
+                  unitSystem === 'ENGLISH'
+                    ? 'bg-[#0f8b8d] text-white shadow-sm'
+                    : 'text-slate-300 hover:text-white hover:bg-white/10'
+                }`}
+                title="Switch all default process rows to English / Imperial (gpm, psia, °F, lb/ft³)"
+              >
+                English
+              </button>
+            </div>
+
+            {/* TOOLS MENU DROPDOWN */}
+            <div className="relative" ref={toolsMenuRef}>
+              <button
+                type="button"
+                onClick={() => setIsToolsMenuOpen((prev) => !prev)}
+                className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#13315c] hover:bg-[#0f8b8d] text-white border border-[#0f8b8d]/70 text-xs font-mono font-semibold transition shadow-sm"
+                aria-expanded={isToolsMenuOpen}
+                aria-haspopup="true"
+              >
+                <Wrench className="w-3.5 h-3.5 text-[#ffd77a]" />
+                Tools
+                <ChevronDown
+                  className={`w-3.5 h-3.5 transition-transform duration-200 ${
+                    isToolsMenuOpen ? 'rotate-180' : ''
+                  }`}
+                />
+              </button>
+
+              {isToolsMenuOpen && (
+                <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0f1419] border border-[#2f3b47] shadow-2xl py-2 z-50 text-xs font-mono divide-y divide-[#2f3b47]/60">
+                  {/* File Save / Load group */}
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        handleSaveDYSol();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-[#7fe0e2] flex items-center gap-2.5 transition"
+                    >
+                      <Save className="w-4 h-4 text-[#7fe0e2]" />
+                      <div>
+                        <div className="font-semibold text-white">Save .DYSol File</div>
+                        <div className="text-[10px] text-slate-400">Save complete inputs & outputs</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        handleLoadDYSolClick();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-[#8be0a8] flex items-center gap-2.5 transition"
+                    >
+                      <Upload className="w-4 h-4 text-[#8be0a8]" />
+                      <div>
+                        <div className="font-semibold text-white">Load .DYSol File</div>
+                        <div className="text-[10px] text-slate-400">Restore sizing & valve state</div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* CAD, CNC & Schedule Exports */}
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        handleExportDXF();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-white flex items-center gap-2.5 transition"
+                    >
+                      <Download className="w-4 h-4 text-[#7fe0e2]" />
+                      <div>
+                        <div className="font-semibold text-white">.DXF CAD</div>
+                        <div className="text-[10px] text-slate-400">2D unrolled cage perforation</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        handleExportGCode();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-white flex items-center gap-2.5 transition"
+                    >
+                      <FileCode className="w-4 h-4 text-[#8be0a8]" />
+                      <div>
+                        <div className="font-semibold text-white">4-AXIS G-CODE</div>
+                        <div className="text-[10px] text-slate-400">CNC 4-axis rotary indexer code</div>
+                      </div>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        handleExportCSV();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-white flex items-center gap-2.5 transition"
+                    >
+                      <Table className="w-4 h-4 text-[#ffd77a]" />
+                      <div>
+                        <div className="font-semibold text-white">.CSV SCHEDULE</div>
+                        <div className="text-[10px] text-slate-400">Drilled cage row perforation matrix</div>
+                      </div>
+                    </button>
+                  </div>
+
+                  {/* Print Datasheet */}
+                  <div className="py-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setIsToolsMenuOpen(false);
+                        window.print();
+                      }}
+                      className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-[#ffd77a] flex items-center gap-2.5 transition"
+                    >
+                      <Printer className="w-4 h-4 text-[#ffd77a]" />
+                      <div>
+                        <div className="font-semibold text-white">PRINT DATASHEET</div>
+                        <div className="text-[10px] text-slate-400">Print clean engineering report</div>
+                      </div>
+                    </button>
+                  </div>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       </header>
@@ -724,15 +1057,113 @@ export default function App() {
                 </button>
               </div>
 
+              {/* QUICK CHARACTERISTIC SELECTOR & TOGGLES (LINKED TO TAB 2 & TAB 3) */}
+              <div className="bg-[#182028] px-5 py-2.5 border-b border-[#2f3b47] flex flex-wrap items-center justify-between gap-3 text-xs font-mono">
+                <div className="flex flex-wrap items-center gap-2.5">
+                  <span className="text-slate-300 flex items-center gap-1.5 font-semibold">
+                    <Sliders className="w-3.5 h-3.5 text-[#ffd77a]" />
+                    Flow Characteristic:
+                  </span>
+                  <div className="inline-flex rounded-lg p-0.5 bg-[#0f1419] border border-[#2f3b47]">
+                    {(
+                      [
+                        { id: 'LINEAR', label: 'Linear' },
+                        { id: 'EQUAL_PCT', label: `Equal % (R=${charConfig.equalPctRangeability})` },
+                        { id: 'BI_LINEAR', label: 'Bi-Linear' },
+                        { id: 'QUICK_OPENING', label: 'Quick Open' },
+                      ] as const
+                    ).map((opt) => (
+                      <button
+                        key={opt.id}
+                        type="button"
+                        onClick={() => setCharConfig({ ...charConfig, type: opt.id })}
+                        className={`px-2.5 py-1 rounded text-xs transition font-semibold ${
+                          charConfig.type === opt.id
+                            ? 'bg-[#0f8b8d] text-white shadow'
+                            : 'text-slate-400 hover:text-slate-200'
+                        }`}
+                      >
+                        {opt.label}
+                      </button>
+                    ))}
+                  </div>
+
+                  <select
+                    value={charConfig.type}
+                    onChange={(e) =>
+                      setCharConfig({
+                        ...charConfig,
+                        type: e.target.value as CharacteristicTypeId,
+                      })
+                    }
+                    className="bg-[#0f1419] border border-[#2f3b47] text-slate-200 rounded px-2.5 py-1 text-xs focus:border-[#0f8b8d] focus:outline-none"
+                    title="Trim Characteristic Law"
+                  >
+                    <option value="EQUAL_PCT">Equal-Percentage (R^((h-1)))</option>
+                    <option value="LINEAR">Linear (φ = h)</option>
+                    <option value="MODIFIED_EQUAL_PCT">Modified Equal-% / Parabolic High-Lift</option>
+                    <option value="BI_LINEAR">Bi-Linear / Dual-Slope</option>
+                    <option value="QUICK_OPENING">Quick-Opening (φ = h^0.45)</option>
+                    <option value="MODIFIED_PARABOLIC">Modified Parabolic (φ = h^1.75)</option>
+                    <option value="CUSTOM_SPLINE">Custom Multi-Point Spline Table</option>
+                    <option value="AUTO_FIT_CONSTANT_GAIN">Auto-Fit Constant Installed Gain</option>
+                  </select>
+                </div>
+
+                <div className="flex items-center gap-3">
+                  {(charConfig.type === 'EQUAL_PCT' || charConfig.type === 'MODIFIED_EQUAL_PCT') && (
+                    <div className="flex items-center gap-1.5 text-slate-300">
+                      <span className="text-[11px]">Rangeability:</span>
+                      {[30, 50, 100].map((r) => (
+                        <button
+                          key={r}
+                          type="button"
+                          onClick={() => setCharConfig({ ...charConfig, equalPctRangeability: r })}
+                          className={`px-2 py-0.5 rounded text-[11px] border transition ${
+                            charConfig.equalPctRangeability === r
+                              ? 'bg-[#0f8b8d] text-white border-[#0f8b8d] font-bold'
+                              : 'bg-[#0f1419] text-slate-400 border-[#2f3b47] hover:border-slate-500'
+                          }`}
+                        >
+                          {r}:1
+                        </button>
+                      ))}
+                    </div>
+                  )}
+
+                  {charConfig.type === 'BI_LINEAR' && (
+                    <div className="flex items-center gap-1.5 text-[11px] text-slate-300">
+                      <span>Knee:</span>
+                      <span className="text-[#ffd77a]">{charConfig.biLinearKneeTravelPct}% travel</span>
+                      <span className="text-slate-500">/</span>
+                      <span className="text-[#7fe0e2]">{charConfig.biLinearKneeCvPct}% Cv</span>
+                    </div>
+                  )}
+
+                  <button
+                    type="button"
+                    onClick={() => setActiveTab('CHARACTERISTICS')}
+                    className="text-[#7fe0e2] hover:underline text-[11px] flex items-center gap-1 shrink-0"
+                    title="Open full characteristic editor, installed gain & authority curve in Tab 2"
+                  >
+                    Full Curve & Authority →
+                  </button>
+                </div>
+              </div>
+
               <div className="p-5 overflow-x-auto">
                 {(() => {
-                  const renderParamLabel = (label: string, infoText: string) => (
+                  const renderParamLabel = (
+                    label: string,
+                    infoText: string,
+                    placement: 'bottom' | 'top' = 'bottom',
+                    align: 'left' | 'right' = 'left'
+                  ) => (
                     <div className="flex items-center justify-between gap-2">
                       <span>{label}</span>
                       <span className="relative group inline-flex items-center shrink-0">
                         <button
                           type="button"
-                          title={infoText}
                           aria-label={`${label}: ${infoText}`}
                           className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
                         >
@@ -740,7 +1171,11 @@ export default function App() {
                         </button>
                         <span
                           role="tooltip"
-                          className="hidden group-hover:block group-focus-within:block absolute left-0 top-full mt-1.5 z-40 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                          className={`hidden group-hover:block group-focus-within:block absolute ${
+                            align === 'right' ? 'right-0' : 'left-0'
+                          } ${
+                            placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
+                          } z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none`}
                         >
                           {infoText}
                         </span>
@@ -752,7 +1187,7 @@ export default function App() {
                     <table className="w-full text-left border-collapse text-xs font-mono">
                       <thead>
                         <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5]">
-                          <th className="py-2.5 px-3 sticky left-0 z-20 bg-[#edf1f5] min-w-[230px] border-r border-[#cfd8e3]">
+                          <th className="py-2.5 px-3 sticky left-0 z-20 hover:z-30 focus-within:z-30 bg-[#edf1f5] min-w-[230px] border-r border-[#cfd8e3]">
                             {renderParamLabel(
                               'Parameter / Operating Case',
                               'Each column represents a process operating condition (e.g. Min, Normal, Max, Start-Up, Upset). Edit the case name or remove extra cases.'
@@ -790,7 +1225,7 @@ export default function App() {
                       </thead>
                       <tbody className="divide-y divide-[#e2e8f0]">
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
                             {renderParamLabel(
                               'Phase',
                               'Fluid state at the valve inlet: LIQUID (IEC 60534-2-1), GAS (compressible), STEAM (IAPWS saturation/superheat), or TWO_PHASE (Parcol separated/homogeneous flashing mixture).'
@@ -817,127 +1252,289 @@ export default function App() {
                         </tr>
 
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
-                            {renderParamLabel(
-                              'Flow (m³/h | Nm³/h | kg/h)',
-                              'Process flow rate: volumetric flow in m³/h for Liquid, standard volumetric flow in Nm³/h for Gas, or mass flow in kg/h for Steam.'
-                            )}
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>Flow ({processUnits.flowRate === 'm3_h' ? 'm³/h' : processUnits.flowRate === 'gpm' ? 'gpm' : processUnits.flowRate === 'Nm3_h' ? 'Nm³/h' : processUnits.flowRate === 'scfh' ? 'SCFH' : processUnits.flowRate === 'scfm' ? 'SCFM' : processUnits.flowRate === 'lb_h' ? 'lb/h' : 'kg/h'})</span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={processUnits.flowRate}
+                                  onChange={(e) => setProcessUnits({ ...processUnits, flowRate: e.target.value as FlowUnit })}
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  title="Change Flow Rate display unit with auto-conversion"
+                                >
+                                  <optgroup label="Liquid / Volumetric">
+                                    <option value="m3_h">m³/h</option>
+                                    <option value="gpm">gpm (US)</option>
+                                  </optgroup>
+                                  <optgroup label="Gas / Standard Volumetric">
+                                    <option value="Nm3_h">Nm³/h</option>
+                                    <option value="scfh">SCFH</option>
+                                    <option value="scfm">SCFM</option>
+                                  </optgroup>
+                                  <optgroup label="Mass Flow">
+                                    <option value="kg_h">kg/h</option>
+                                    <option value="lb_h">lb/h</option>
+                                  </optgroup>
+                                </select>
+                                <span className="relative group inline-flex items-center shrink-0">
+                                  <button
+                                    type="button"
+                                    aria-label="Flow info"
+                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span
+                                    role="tooltip"
+                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                                  >
+                                    Process flow rate: volumetric flow in m³/h or gpm for Liquid, standard volumetric flow in Nm³/h or SCFH/SCFM for Gas, or mass flow in kg/h or lb/h for Steam. Automatically converted when switching units.
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
                           </th>
-                          {operatingCases.map((c, idx) => (
-                            <td key={c.id} className="py-2 px-2.5">
-                              <input
-                                type="number"
-                                step="1"
-                                value={c.flowRate}
-                                onChange={(e) => {
-                                  const next = [...operatingCases];
-                                  next[idx].flowRate = Number(e.target.value);
-                                  setOperatingCases(next);
-                                }}
-                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              />
-                            </td>
-                          ))}
+                          {operatingCases.map((c, idx) => {
+                            const displayFlow = Number(fromInternalFlow(c.flowRate, processUnits.flowRate, c.fluidPhase).toFixed(2));
+                            return (
+                              <td key={c.id} className="py-2 px-2.5">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={displayFlow}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    const val = Number(e.target.value);
+                                    next[idx].flowRate = Number(toInternalFlow(val, processUnits.flowRate, c.fluidPhase).toFixed(4));
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                />
+                              </td>
+                            );
+                          })}
                         </tr>
 
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
-                            {renderParamLabel(
-                              'P1 (bar a)',
-                              'Upstream absolute inlet pressure at the valve inlet flange in bar(a). Used to compute ΔP, choked pressure drop, and gas expansion factor Y.'
-                            )}
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>P1 ({processUnits.P1})</span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={processUnits.P1}
+                                  onChange={(e) => setProcessUnits({ ...processUnits, P1: e.target.value as PressureUnit })}
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  title="Change P1 display unit with auto-conversion"
+                                >
+                                  <option value="bar_a">bar a</option>
+                                  <option value="psia">psia</option>
+                                  <option value="kPa_a">kPa a</option>
+                                  <option value="bar_g">bar g</option>
+                                  <option value="psig">psig</option>
+                                </select>
+                                <span className="relative group inline-flex items-center shrink-0">
+                                  <button
+                                    type="button"
+                                    aria-label="P1 info"
+                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span
+                                    role="tooltip"
+                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                                  >
+                                    Upstream absolute inlet pressure at the valve inlet flange. Used to compute ΔP, choked pressure drop, and gas expansion factor Y.
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
                           </th>
-                          {operatingCases.map((c, idx) => (
-                            <td key={c.id} className="py-2 px-2.5">
-                              <input
-                                type="number"
-                                step="0.5"
-                                value={c.P1_bar_a}
-                                onChange={(e) => {
-                                  const next = [...operatingCases];
-                                  next[idx].P1_bar_a = Number(e.target.value);
-                                  setOperatingCases(next);
-                                }}
-                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              />
-                            </td>
-                          ))}
+                          {operatingCases.map((c, idx) => {
+                            const displayP1 = Number(fromInternalPressure(c.P1_bar_a, processUnits.P1).toFixed(2));
+                            return (
+                              <td key={c.id} className="py-2 px-2.5">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={displayP1}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    const val = Number(e.target.value);
+                                    next[idx].P1_bar_a = Number(toInternalPressure(val, processUnits.P1).toFixed(4));
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                />
+                              </td>
+                            );
+                          })}
                         </tr>
 
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
-                            {renderParamLabel(
-                              'P2 (bar a)',
-                              'Downstream absolute outlet pressure at the valve outlet flange in bar(a). ΔP = P1 − P2; also drives cavitation index σ and flashing checks.'
-                            )}
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>P2 ({processUnits.P2})</span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={processUnits.P2}
+                                  onChange={(e) => setProcessUnits({ ...processUnits, P2: e.target.value as PressureUnit })}
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  title="Change P2 display unit with auto-conversion"
+                                >
+                                  <option value="bar_a">bar a</option>
+                                  <option value="psia">psia</option>
+                                  <option value="kPa_a">kPa a</option>
+                                  <option value="bar_g">bar g</option>
+                                  <option value="psig">psig</option>
+                                </select>
+                                <span className="relative group inline-flex items-center shrink-0">
+                                  <button
+                                    type="button"
+                                    aria-label="P2 info"
+                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span
+                                    role="tooltip"
+                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                                  >
+                                    Downstream absolute outlet pressure at the valve outlet flange. ΔP = P1 − P2; also drives cavitation index σ and flashing checks.
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
                           </th>
-                          {operatingCases.map((c, idx) => (
-                            <td key={c.id} className="py-2 px-2.5">
-                              <input
-                                type="number"
-                                step="0.5"
-                                value={c.P2_bar_a}
-                                onChange={(e) => {
-                                  const next = [...operatingCases];
-                                  next[idx].P2_bar_a = Number(e.target.value);
-                                  setOperatingCases(next);
-                                }}
-                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              />
-                            </td>
-                          ))}
+                          {operatingCases.map((c, idx) => {
+                            const displayP2 = Number(fromInternalPressure(c.P2_bar_a, processUnits.P2).toFixed(2));
+                            return (
+                              <td key={c.id} className="py-2 px-2.5">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={displayP2}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    const val = Number(e.target.value);
+                                    next[idx].P2_bar_a = Number(toInternalPressure(val, processUnits.P2).toFixed(4));
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                />
+                              </td>
+                            );
+                          })}
                         </tr>
 
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
-                            {renderParamLabel(
-                              'T1 (°C)',
-                              'Upstream flowing fluid temperature in °C. Used for ASME B16.34 pressure-temperature rating, gas density, sonic velocity, and thermal expansion.'
-                            )}
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>T1 ({processUnits.T1 === 'degC' ? '°C' : processUnits.T1 === 'degF' ? '°F' : processUnits.T1 === 'K' ? 'K' : '°R'})</span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={processUnits.T1}
+                                  onChange={(e) => setProcessUnits({ ...processUnits, T1: e.target.value as TemperatureUnit })}
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  title="Change Temperature display unit with auto-conversion"
+                                >
+                                  <option value="degC">°C</option>
+                                  <option value="degF">°F</option>
+                                  <option value="K">K</option>
+                                  <option value="degR">°R</option>
+                                </select>
+                                <span className="relative group inline-flex items-center shrink-0">
+                                  <button
+                                    type="button"
+                                    aria-label="T1 info"
+                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span
+                                    role="tooltip"
+                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                                  >
+                                    Upstream flowing fluid temperature. Used for ASME B16.34 pressure-temperature rating, gas density, sonic velocity, and thermal expansion.
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
                           </th>
-                          {operatingCases.map((c, idx) => (
-                            <td key={c.id} className="py-2 px-2.5">
-                              <input
-                                type="number"
-                                step="5"
-                                value={c.T1_degC}
-                                onChange={(e) => {
-                                  const next = [...operatingCases];
-                                  next[idx].T1_degC = Number(e.target.value);
-                                  setOperatingCases(next);
-                                }}
-                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                              />
-                            </td>
-                          ))}
+                          {operatingCases.map((c, idx) => {
+                            const displayT1 = Number(fromInternalTemperature(c.T1_degC, processUnits.T1).toFixed(1));
+                            return (
+                              <td key={c.id} className="py-2 px-2.5">
+                                <input
+                                  type="number"
+                                  step="any"
+                                  value={displayT1}
+                                  onChange={(e) => {
+                                    const next = [...operatingCases];
+                                    const val = Number(e.target.value);
+                                    next[idx].T1_degC = Number(toInternalTemperature(val, processUnits.T1).toFixed(2));
+                                    setOperatingCases(next);
+                                  }}
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                />
+                              </td>
+                            );
+                          })}
                         </tr>
 
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
-                            {renderParamLabel(
-                              'ρ (kg/m³) / MW',
-                              'For Liquid: flowing density ρ in kg/m³. For Gas/Steam: molecular weight MW in kg/kmol.'
-                            )}
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>ρ ({processUnits.density === 'kg_m3' ? 'kg/m³' : processUnits.density === 'lb_ft3' ? 'lb/ft³' : 'SG'}) / MW</span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={processUnits.density}
+                                  onChange={(e) => setProcessUnits({ ...processUnits, density: e.target.value as DensityUnit })}
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  title="Change Liquid Density display unit with auto-conversion"
+                                >
+                                  <option value="kg_m3">kg/m³</option>
+                                  <option value="lb_ft3">lb/ft³</option>
+                                  <option value="sg">SG (rel water)</option>
+                                </select>
+                                <span className="relative group inline-flex items-center shrink-0">
+                                  <button
+                                    type="button"
+                                    aria-label="Density/MW info"
+                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span
+                                    role="tooltip"
+                                    className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                                  >
+                                    For Liquid: flowing density ρ in kg/m³, lb/ft³, or Specific Gravity (SG). For Gas/Steam: molecular weight MW in kg/kmol (g/mol).
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
                           </th>
                           {operatingCases.map((c, idx) => (
                             <td key={c.id} className="py-2 px-2.5">
                               {c.fluidPhase === 'LIQUID' ? (
                                 <input
                                   type="number"
-                                  step="10"
-                                  value={c.rho_kg_m3}
+                                  step="any"
+                                  value={Number(fromInternalDensity(c.rho_kg_m3, processUnits.density).toFixed(2))}
                                   onChange={(e) => {
                                     const next = [...operatingCases];
-                                    next[idx].rho_kg_m3 = Number(e.target.value);
+                                    const val = Number(e.target.value);
+                                    next[idx].rho_kg_m3 = Number(toInternalDensity(val, processUnits.density).toFixed(2));
                                     setOperatingCases(next);
                                   }}
                                   className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                                  title="Liquid Density (kg/m³)"
+                                  title={`Liquid Density (${processUnits.density})`}
                                 />
                               ) : (
                                 <input
                                   type="number"
-                                  step="0.5"
+                                  step="0.1"
                                   value={c.molecularWeight}
                                   onChange={(e) => {
                                     const next = [...operatingCases];
@@ -953,26 +1550,53 @@ export default function App() {
                         </tr>
 
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
-                            {renderParamLabel(
-                              'Pv (bar a) / γ',
-                              'For Liquid: fluid vapor pressure Pv in bar(a) at T1 (governs choked ΔP and cavitation/flashing). For Gas/Steam: specific heat ratio γ = Cp/Cv.'
-                            )}
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>Pv ({processUnits.Pv}) / γ</span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={processUnits.Pv}
+                                  onChange={(e) => setProcessUnits({ ...processUnits, Pv: e.target.value as PressureUnit })}
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  title="Change Vapor Pressure display unit with auto-conversion"
+                                >
+                                  <option value="bar_a">bar a</option>
+                                  <option value="psia">psia</option>
+                                  <option value="kPa_a">kPa a</option>
+                                </select>
+                                <span className="relative group inline-flex items-center shrink-0">
+                                  <button
+                                    type="button"
+                                    aria-label="Pv/gamma info"
+                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span
+                                    role="tooltip"
+                                    className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                                  >
+                                    For Liquid: fluid vapor pressure Pv at T1 (governs choked ΔP and cavitation/flashing). For Gas/Steam: specific heat ratio γ = Cp/Cv.
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
                           </th>
                           {operatingCases.map((c, idx) => (
                             <td key={c.id} className="py-2 px-2.5">
                               {c.fluidPhase === 'LIQUID' ? (
                                 <input
                                   type="number"
-                                  step="0.1"
-                                  value={c.Pv_bar_a}
+                                  step="any"
+                                  value={Number(fromInternalPressure(c.Pv_bar_a, processUnits.Pv).toFixed(3))}
                                   onChange={(e) => {
                                     const next = [...operatingCases];
-                                    next[idx].Pv_bar_a = Number(e.target.value);
+                                    const val = Number(e.target.value);
+                                    next[idx].Pv_bar_a = Number(toInternalPressure(val, processUnits.Pv).toFixed(4));
                                     setOperatingCases(next);
                                   }}
                                   className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                                  title="Vapor Pressure Pv (bar a)"
+                                  title={`Vapor Pressure Pv (${processUnits.Pv})`}
                                 />
                               ) : (
                                 <input
@@ -993,26 +1617,53 @@ export default function App() {
                         </tr>
 
                         <tr className="hover:bg-[#f8fafc]">
-                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
-                            {renderParamLabel(
-                              'ν (cSt) / Z',
-                              'For Liquid: kinematic viscosity ν in cSt (used for IEC 60534-2-1 Reynolds correction F_R). For Gas/Steam: compressibility factor Z.'
-                            )}
+                          <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                            <div className="flex items-center justify-between gap-2">
+                              <span>ν ({processUnits.viscosity}) / Z</span>
+                              <div className="flex items-center gap-1">
+                                <select
+                                  value={processUnits.viscosity}
+                                  onChange={(e) => setProcessUnits({ ...processUnits, viscosity: e.target.value as ViscosityUnit })}
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  title="Change Viscosity display unit with auto-conversion"
+                                >
+                                  <option value="cSt">cSt (mm²/s)</option>
+                                  <option value="SSU">SSU</option>
+                                  <option value="cP">cP</option>
+                                </select>
+                                <span className="relative group inline-flex items-center shrink-0">
+                                  <button
+                                    type="button"
+                                    aria-label="Viscosity/Z info"
+                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
+                                  >
+                                    <Info className="w-3.5 h-3.5" />
+                                  </button>
+                                  <span
+                                    role="tooltip"
+                                    className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
+                                  >
+                                    For Liquid: kinematic viscosity ν (used for IEC 60534-2-1 Reynolds correction F_R). For Gas/Steam: compressibility factor Z.
+                                  </span>
+                                </span>
+                              </div>
+                            </div>
                           </th>
                           {operatingCases.map((c, idx) => (
                             <td key={c.id} className="py-2 px-2.5">
                               {c.fluidPhase === 'LIQUID' ? (
                                 <input
                                   type="number"
-                                  step="0.05"
-                                  value={c.viscosity_cSt}
+                                  step="any"
+                                  value={Number(fromInternalViscosity(c.viscosity_cSt, processUnits.viscosity).toFixed(2))}
                                   onChange={(e) => {
                                     const next = [...operatingCases];
-                                    next[idx].viscosity_cSt = Number(e.target.value);
+                                    const val = Number(e.target.value);
+                                    next[idx].viscosity_cSt = Number(toInternalViscosity(val, processUnits.viscosity).toFixed(3));
                                     setOperatingCases(next);
                                   }}
                                   className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
-                                  title="Kinematic Viscosity (cSt)"
+                                  title={`Kinematic Viscosity (${processUnits.viscosity})`}
                                 />
                               ) : (
                                 <input
@@ -1034,10 +1685,11 @@ export default function App() {
 
                         {operatingCases.some((c) => c.fluidPhase === 'TWO_PHASE') && (
                           <tr className="hover:bg-[#f8fafc]">
-                            <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 bg-white border-r border-[#cfd8e3]">
+                            <th className="py-2 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
                               {renderParamLabel(
                                 'Gas/Vapor Mass Frac fg',
-                                'Inlet gas/vapor mass quality fg (0 to 1) for TWO_PHASE sizing. Uses Parcol §4.3 separated model for fg < 0.05 or homogeneous Ve model for fg >= 0.05.'
+                                'Inlet gas/vapor mass quality fg (0 to 1) for TWO_PHASE sizing. Uses Parcol §4.3 separated model for fg < 0.05 or homogeneous Ve model for fg >= 0.05.',
+                                'top'
                               )}
                             </th>
                             {operatingCases.map((c, idx) => (
@@ -1070,10 +1722,11 @@ export default function App() {
 
                         {/* LIVE CALCULATED OUTPUT ROWS (DARK INSTRUMENT TELEMETRY) */}
                         <tr className="bg-[#0f1419] text-slate-200 border-t-2 border-[#2f3b47]">
-                          <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
                             {renderParamLabel(
                               'Calculated Req. Cv',
-                              'Required IEC 60534-2-1 flow coefficient (Cv / Kv) for this operating condition, auto-recalculated when valve size, piping, or trim changes.'
+                              'Required IEC 60534-2-1 flow coefficient (Cv / Kv) for this operating condition, auto-recalculated when valve size, piping, or trim changes.',
+                              'top'
                             )}
                           </th>
                           {operatingCases.map((c) => {
@@ -1101,10 +1754,11 @@ export default function App() {
                         </tr>
 
                         <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
-                          <th className="py-2.5 px-3 font-semibold text-[#8be0a8] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#8be0a8] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
                             {renderParamLabel(
                               'Valve % Open (Travel)',
-                              'Predicted valve plug travel (% open) based on the active valve size, rated Cv, trim style, and flow characteristic curve.'
+                              'Predicted valve plug travel (% open) based on the active valve size, rated Cv, trim style, and flow characteristic curve.',
+                              'top'
                             )}
                           </th>
                           {operatingCases.map((c) => {
@@ -1140,10 +1794,11 @@ export default function App() {
                         </tr>
 
                         <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
-                          <th className="py-2.5 px-3 font-semibold text-[#7fe0e2] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#7fe0e2] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
                             {renderParamLabel(
                               'Req. FL / Effective FL(h)',
-                              'Warren VSSTR-07 Required FL = sqrt(dP/(P1-FF*Pv)) vs stroke-dependent valve recovery FL(h) and xT(h) at predicted plug travel.'
+                              'Warren VSSTR-07 Required FL = sqrt(dP/(P1-FF*Pv)) vs stroke-dependent valve recovery FL(h) and xT(h) at predicted plug travel.',
+                              'top'
                             )}
                           </th>
                           {operatingCases.map((c) => {
@@ -1183,10 +1838,11 @@ export default function App() {
                         </tr>
 
                         <tr className="bg-[#0f1419] text-slate-200 border-t border-[#2f3b47]">
-                          <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 bg-[#0f1419] border-r border-[#2f3b47]">
+                          <th className="py-2.5 px-3 font-semibold text-[#ffd77a] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#0f1419] border-r border-[#2f3b47]">
                             {renderParamLabel(
                               'ISA-RP75.23 σ / σ_mr & OSHA',
-                              'Service cavitation index σ vs ISA-RP75.23 max recommended damage limit σ_mr (with Parcol material hardness index), plus OSHA/NIOSH acoustic shift.'
+                              'Service cavitation index σ vs ISA-RP75.23 max recommended damage limit σ_mr (with Parcol material hardness index), plus OSHA/NIOSH acoustic shift.',
+                              'top'
                             )}
                           </th>
                           {operatingCases.map((c) => {
@@ -1267,46 +1923,76 @@ export default function App() {
                   <table className="w-full text-left border-collapse text-xs font-mono">
                     <thead>
                       <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5]">
-                        <th className="py-2.5 px-3">Case</th>
-                        <th className="py-2.5 px-2">ΔP / ΔP_choked (bar)</th>
-                        <th className="py-2.5 px-2">FP / FLP</th>
-                        <th className="py-2.5 px-2">Re_v (F_R)</th>
-                        <th className="py-2.5 px-2">Req Cv (Kv)</th>
-                        <th className="py-2.5 px-2">% Rated Cv</th>
-                        <th className="py-2.5 px-2">Travel %</th>
-                        <th className="py-2.5 px-2">Cavitation σ / xFZ / Kc</th>
-                        <th className="py-2.5 px-2">Regime Classification</th>
-                        <th className="py-2.5 px-2">Body Vel / Mach</th>
-                        <th className="py-2.5 px-2">Strouhal f_p (Hz)</th>
-                        <th className="py-2.5 px-2">Noise Std → Drilled (dBA)</th>
+                        <th className="py-2.5 px-3 sticky left-0 z-20 hover:z-30 focus-within:z-30 bg-[#edf1f5] min-w-[200px] border-r border-[#cfd8e3]">
+                          Result Parameter
+                        </th>
+                        {caseResults.map((r) => (
+                          <th key={r.id} className="py-2.5 px-3 font-bold text-[#0b2545] min-w-[150px]">
+                            {r.label}
+                          </th>
+                        ))}
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-[#e2e8f0]">
-                      {caseResults.map((r) => {
-                        const cvOver85 = r.percentOfRatedCv > 85;
-                        const cvUnder10 = r.percentOfRatedCv < 10;
-                        return (
-                          <tr key={r.id} className="hover:bg-[#f8fafc]">
-                            <td className="py-3 px-3 font-bold text-[#0b2545]">{r.label}</td>
-                            <td className="py-3 px-2">
-                              <span className="text-[#0b2545] font-semibold">{r.deltaP_bar}</span> /{' '}
-                              <span className="text-slate-500">{r.deltaP_choked_bar}</span>
-                              {r.isChoked && (
-                                <span className="ml-1.5 px-1.5 py-0.5 rounded bg-[#182028] text-[#ffd77a] border border-[#2f3b47] text-[10px]">
-                                  CHOKED
-                                </span>
-                              )}
-                            </td>
-                            <td className="py-3 px-2 text-slate-700">
-                              {r.FP} / {r.FLP}
-                            </td>
-                            <td className="py-3 px-2 text-slate-700">
-                              {r.Rev.toLocaleString()} ({r.FR})
-                            </td>
-                            <td className="py-3 px-2 font-bold text-[#0f8b8d]">
-                              {r.requiredCv} <span className="text-slate-500 font-normal">({r.requiredKv})</span>
-                            </td>
-                            <td className="py-3 px-2">
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          ΔP / ΔP_choked (bar)
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3">
+                            <span className="text-[#0b2545] font-semibold">{r.deltaP_bar}</span> /{' '}
+                            <span className="text-slate-500">{r.deltaP_choked_bar}</span>
+                            {r.isChoked && (
+                              <span className="ml-1.5 px-1.5 py-0.5 rounded bg-[#182028] text-[#ffd77a] border border-[#2f3b47] text-[10px]">
+                                CHOKED
+                              </span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          FP / FLP
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3 text-slate-700">
+                            {r.FP} / {r.FLP}
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Re_v (F_R)
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3 text-slate-700">
+                            {r.Rev.toLocaleString()} ({r.FR})
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Req Cv (Kv)
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3 font-bold text-[#0f8b8d]">
+                            {r.requiredCv} <span className="text-slate-500 font-normal">({r.requiredKv})</span>
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          % Rated Cv
+                        </th>
+                        {caseResults.map((r) => {
+                          const cvOver85 = r.percentOfRatedCv > 85;
+                          const cvUnder10 = r.percentOfRatedCv < 10;
+                          return (
+                            <td key={r.id} className="py-2.5 px-3">
                               <span
                                 className={`font-bold ${
                                   cvOver85
@@ -1319,57 +2005,105 @@ export default function App() {
                                 {r.percentOfRatedCv}%
                               </span>
                             </td>
-                            <td className="py-3 px-2 font-semibold text-[#0b2545]">
-                              {r.estimatedTravelPct}%
-                            </td>
-                            <td className="py-3 px-2 text-slate-700">
-                              {r.fluidPhase === 'LIQUID'
-                                ? `σ=${r.sigmaCavitation} | ${r.xFZ} | ${r.Kc_effective}`
-                                : `xTP=${r.xTP}`}
-                            </td>
-                            <td className="py-3 px-2">
-                              {renderStatusBadge(r.regimeSeverity, r.regimeLabel)}
-                            </td>
-                            <td className="py-3 px-2">
-                              <span
-                                className={
-                                  r.bodyVelocity_m_s > r.bodyVelocityLimit_m_s ||
-                                  r.outletMach > r.outletMachLimit
-                                    ? 'text-red-600 font-bold'
-                                    : 'text-[#0b2545]'
-                                }
-                              >
-                                {r.bodyVelocity_m_s} m/s (M={r.outletMach})
+                          );
+                        })}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Travel %
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3 font-semibold text-[#0b2545]">
+                            {r.estimatedTravelPct}%
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Cavitation σ / xFZ / Kc
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3 text-slate-700">
+                            {r.fluidPhase === 'LIQUID'
+                              ? `σ=${r.sigmaCavitation} | ${r.xFZ} | ${r.Kc_effective}`
+                              : `xTP=${r.xTP}`}
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Regime Classification
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3">
+                            {renderStatusBadge(r.regimeSeverity, r.regimeLabel)}
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Body Vel / Mach
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3">
+                            <span
+                              className={
+                                r.bodyVelocity_m_s > r.bodyVelocityLimit_m_s ||
+                                r.outletMach > r.outletMachLimit
+                                  ? 'text-red-600 font-bold'
+                                  : 'text-[#0b2545]'
+                              }
+                            >
+                              {r.bodyVelocity_m_s} m/s (M={r.outletMach})
+                            </span>
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Strouhal f_p (Hz)
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3 text-[#0f8b8d] font-semibold">
+                            {r.strouhalPeakFreq_Hz.toLocaleString()} Hz
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Noise Std → Drilled (dBA)
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3">
+                            <div className="flex items-center gap-1.5">
+                              <span className="text-slate-400 line-through">
+                                {r.noiseStandardTrim_dBA}
                               </span>
-                            </td>
-                            <td className="py-3 px-2 text-[#0f8b8d] font-semibold">
-                              {r.strouhalPeakFreq_Hz.toLocaleString()} Hz
-                            </td>
-                            <td className="py-3 px-2">
-                              <div className="flex items-center gap-1.5">
-                                <span className="text-slate-400 line-through">
-                                  {r.noiseStandardTrim_dBA}
-                                </span>
-                                <span className="text-slate-400">→</span>
-                                <span
-                                  className={`font-bold ${
-                                    r.noiseStatus === 'PASS'
-                                      ? 'text-emerald-700'
-                                      : r.noiseStatus === 'WARNING'
-                                      ? 'text-amber-600'
-                                      : 'text-red-600'
-                                  }`}
-                                >
-                                  {r.noiseDrilledCage_dBA} dBA
-                                </span>
-                                <span className="text-[10px] text-[#0f8b8d] font-semibold">
-                                  (-{r.noiseAttenuation_dBA} dB)
-                                </span>
-                              </div>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                              <span className="text-slate-400">→</span>
+                              <span
+                                className={`font-bold ${
+                                  r.noiseStatus === 'PASS'
+                                    ? 'text-emerald-700'
+                                    : r.noiseStatus === 'WARNING'
+                                    ? 'text-amber-600'
+                                    : 'text-red-600'
+                                }`}
+                              >
+                                {r.noiseDrilledCage_dBA} dBA
+                              </span>
+                              <span className="text-[10px] text-[#0f8b8d] font-semibold">
+                                (-{r.noiseAttenuation_dBA} dB)
+                              </span>
+                            </div>
+                          </td>
+                        ))}
+                      </tr>
                     </tbody>
                   </table>
                 </div>
@@ -2425,6 +3159,93 @@ export default function App() {
 
                 <div className="p-5 space-y-4">
                   <div className="space-y-3">
+                    {/* Characterized Cage Profile / Trim Law */}
+                    <div className="bg-[#edf1f5] border border-[#cfd8e3] rounded-lg p-3 space-y-2">
+                      <div className="flex items-center justify-between">
+                        <label className="text-xs font-mono text-[#13315c] font-semibold flex items-center gap-1.5">
+                          <Sliders className="w-3.5 h-3.5 text-[#0f8b8d]" />
+                          Cage Flow Characteristic Law
+                        </label>
+                        <button
+                          type="button"
+                          onClick={() => setActiveTab('CHARACTERISTICS')}
+                          className="text-[11px] font-mono text-[#0f8b8d] hover:underline"
+                          title="Open characteristic curve analysis in Tab 2"
+                        >
+                          View Curve →
+                        </button>
+                      </div>
+
+                      {/* Quick Toggles */}
+                      <div className="grid grid-cols-4 gap-1 bg-white p-1 rounded-md border border-[#cfd8e3]">
+                        {(
+                          [
+                            { id: 'LINEAR', label: 'Linear' },
+                            { id: 'EQUAL_PCT', label: 'Equal %' },
+                            { id: 'BI_LINEAR', label: 'Bi-Linear' },
+                            { id: 'QUICK_OPENING', label: 'Quick Open' },
+                          ] as const
+                        ).map((opt) => (
+                          <button
+                            key={opt.id}
+                            type="button"
+                            onClick={() => setCharConfig({ ...charConfig, type: opt.id })}
+                            className={`py-1 text-center rounded text-[11px] font-mono font-semibold transition ${
+                              charConfig.type === opt.id
+                                ? 'bg-[#0f8b8d] text-white shadow-sm'
+                                : 'text-slate-600 hover:bg-[#edf1f5]'
+                            }`}
+                          >
+                            {opt.label}
+                          </button>
+                        ))}
+                      </div>
+
+                      <div className="flex items-center gap-2">
+                        <select
+                          value={charConfig.type}
+                          onChange={(e) =>
+                            setCharConfig({
+                              ...charConfig,
+                              type: e.target.value as CharacteristicTypeId,
+                            })
+                          }
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                        >
+                          <option value="EQUAL_PCT">Equal-Percentage (R^((h-1)))</option>
+                          <option value="LINEAR">Linear (φ = h)</option>
+                          <option value="MODIFIED_EQUAL_PCT">Modified Equal-% / Parabolic High-Lift</option>
+                          <option value="BI_LINEAR">Bi-Linear / Dual-Slope</option>
+                          <option value="QUICK_OPENING">Quick-Opening (φ = h^0.45)</option>
+                          <option value="MODIFIED_PARABOLIC">Modified Parabolic (φ = h^1.75)</option>
+                          <option value="CUSTOM_SPLINE">Custom Multi-Point Spline Table</option>
+                          <option value="AUTO_FIT_CONSTANT_GAIN">Auto-Fit Constant Installed Gain</option>
+                        </select>
+
+                        {(charConfig.type === 'EQUAL_PCT' || charConfig.type === 'MODIFIED_EQUAL_PCT') && (
+                          <select
+                            value={charConfig.equalPctRangeability}
+                            onChange={(e) =>
+                              setCharConfig({
+                                ...charConfig,
+                                equalPctRangeability: Number(e.target.value),
+                              })
+                            }
+                            className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-bold focus:border-[#0f8b8d] focus:outline-none shrink-0"
+                            title="Inherent Rangeability R"
+                          >
+                            <option value={30}>R=30</option>
+                            <option value={50}>R=50</option>
+                            <option value={100}>R=100</option>
+                          </select>
+                        )}
+                      </div>
+
+                      <p className="text-[10.5px] font-mono text-slate-500 leading-tight">
+                        Cage hole distribution, row-by-row hole diameters, and ligament stresses automatically re-synthesize to match this curve.
+                      </p>
+                    </div>
+
                     <div>
                       <label className="block text-xs font-mono text-[#13315c] font-semibold mb-1">
                         Cage / Sleeve Alloy (ASME / NACE MR0175)
