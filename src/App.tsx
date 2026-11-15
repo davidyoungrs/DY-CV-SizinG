@@ -4164,81 +4164,71 @@ export default function App() {
               </div>
             </div>
 
-            {/* Bottom Row: Discrete Axial Row Schedule Table & 4-Axis CNC G-Code Preview */}
-            <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
-              <div className="lg:col-span-7 dy-card overflow-hidden">
-                <div className="section-band px-5 py-3.5">
+            {/* Bottom Row: Discrete Axial Row Schedule Table */}
+            <div className="dy-card overflow-hidden">
+              <div className="section-band px-5 py-3.5 flex items-center justify-between">
+                <div>
                   <h3 className="text-sm font-bold text-white">
                     Zero-Deadband Overlapping Axial Hole Row Schedule (R1 to R{cageSynthesis.rows.length})
                   </h3>
+                  <p className="text-xs text-slate-300 font-mono">
+                    Circumferential &amp; diagonal ligament pitch, axial overlap %, and Sibanda gallery elevation factors
+                  </p>
                 </div>
-                <div className="p-5">
-                  <div className="overflow-x-auto max-h-80">
-                    <table className="w-full text-left border-collapse text-xs font-mono">
-                      <thead>
-                        <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5] sticky top-0">
-                          <th className="py-2 px-2">Row</th>
-                          <th className="py-2 px-2">Z Center (Span mm)</th>
-                          <th className="py-2 px-2">Hole Ød_k</th>
-                          <th className="py-2 px-2">Count n_k</th>
-                          <th className="py-2 px-2">Axial Overlap</th>
-                          <th className="py-2 px-2">Pitch p_θ (p_θ/d)</th>
-                          <th className="py-2 px-2">Ligament w</th>
-                          <th className="py-2 px-2">Sibanda HT^c</th>
-                          <th className="py-2 px-2">Cum. Cv</th>
-                        </tr>
-                      </thead>
-                      <tbody className="divide-y divide-[#e2e8f0]">
-                        {cageSynthesis.rows.map((r) => (
-                          <tr key={r.rowIndex} className="hover:bg-[#f8fafc]">
-                            <td className="py-1.5 px-2 font-bold text-[#0f8b8d]">R{r.rowIndex}</td>
-                            <td className="py-1.5 px-2 text-[#0b2545]">
-                              {r.zElevation_mm}{' '}
-                              <span className="text-slate-500 text-[10px]">
-                                [{r.zBottom_mm}–{r.zTop_mm}]
-                              </span>
-                            </td>
-                            <td className="py-1.5 px-2 text-[#0b2545]">Ø{r.holeDia_mm} mm</td>
-                            <td className="py-1.5 px-2 font-bold text-[#0b2545]">{r.holeCount}</td>
-                            <td className="py-1.5 px-2 text-emerald-700 font-semibold">
-                              {r.rowIndex === 1 ? 'Seat Tangent' : `${r.axialOverlapPct}%`}
-                            </td>
-                            <td className="py-1.5 px-2 text-slate-700">
-                              {r.circumferentialPitch_mm} ({r.pitchToDiaRatio}x)
-                            </td>
-                            <td className="py-1.5 px-2 text-slate-700">{r.ligamentWidth_mm} mm</td>
-                            <td className="py-1.5 px-2 text-[#0f8b8d] font-semibold">
-                              {r.sibandaRowElevationFactor}x
-                            </td>
-                            <td className="py-1.5 px-2 font-bold text-emerald-700">
-                              {r.cumulativeCv}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                </div>
+                <button
+                  onClick={handleExportScheduleCSV}
+                  className="px-3 py-1.5 rounded bg-[#0f8b8d] hover:bg-[#0d7678] text-white text-xs font-mono font-semibold transition flex items-center gap-1.5"
+                  title="Export Schedule as CSV"
+                >
+                  <FileText className="w-3.5 h-3.5" />
+                  Export .CSV Schedule
+                </button>
               </div>
-
-              {/* 4-Axis CNC G-Code Terminal */}
-              <div className="lg:col-span-5 dy-card overflow-hidden">
-                <div className="section-band px-5 py-3.5 flex items-center justify-between">
-                  <h3 className="text-sm font-bold text-white">
-                    4-Axis Rotary Indexer CNC G-Code (G83 Peck Drill)
-                  </h3>
-                  <button
-                    onClick={handleExportGCode}
-                    className="px-2.5 py-1 rounded bg-[#0f8b8d] hover:bg-[#0d7678] text-white text-xs font-mono font-semibold transition"
-                  >
-                    Export .NC
-                  </button>
-                </div>
-                <div className="p-5">
-                  <pre className="instrument-panel rounded-lg p-3.5 text-[11px] font-mono text-[#8be0a8] overflow-y-auto max-h-80 leading-relaxed">
-                    {generate4AxisCageGCode(cageSynthesis).slice(0, 2600)}
-                    {'\n... [TRUNCATED IN PREVIEW — CLICK EXPORT .NC FOR FULL PROGRAM]'}
-                  </pre>
+              <div className="p-5">
+                <div className="overflow-x-auto max-h-96">
+                  <table className="w-full text-left border-collapse text-xs font-mono">
+                    <thead>
+                      <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5] sticky top-0">
+                        <th className="py-2 px-3">Row</th>
+                        <th className="py-2 px-3">Z Center (Span mm)</th>
+                        <th className="py-2 px-3">Hole Ød_k</th>
+                        <th className="py-2 px-3">Count n_k</th>
+                        <th className="py-2 px-3">Axial Overlap</th>
+                        <th className="py-2 px-3">Pitch p_θ (p_θ/d)</th>
+                        <th className="py-2 px-3">Ligament w</th>
+                        <th className="py-2 px-3">Sibanda HT^c</th>
+                        <th className="py-2 px-3">Cum. Cv</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-[#e2e8f0]">
+                      {cageSynthesis.rows.map((r) => (
+                        <tr key={r.rowIndex} className="hover:bg-[#f8fafc]">
+                          <td className="py-2 px-3 font-bold text-[#0f8b8d]">R{r.rowIndex}</td>
+                          <td className="py-2 px-3 text-[#0b2545]">
+                            {r.zElevation_mm}{' '}
+                            <span className="text-slate-500 text-[10px]">
+                              [{r.zBottom_mm}–{r.zTop_mm}]
+                            </span>
+                          </td>
+                          <td className="py-2 px-3 text-[#0b2545]">Ø{r.holeDia_mm} mm</td>
+                          <td className="py-2 px-3 font-bold text-[#0b2545]">{r.holeCount}</td>
+                          <td className="py-2 px-3 text-emerald-700 font-semibold">
+                            {r.rowIndex === 1 ? 'Seat Tangent' : `${r.axialOverlapPct}%`}
+                          </td>
+                          <td className="py-2 px-3 text-slate-700">
+                            {r.circumferentialPitch_mm} ({r.pitchToDiaRatio}x)
+                          </td>
+                          <td className="py-2 px-3 text-slate-700">{r.ligamentWidth_mm} mm</td>
+                          <td className="py-2 px-3 text-[#0f8b8d] font-semibold">
+                            {r.sibandaRowElevationFactor}x
+                          </td>
+                          <td className="py-2 px-3 font-bold text-emerald-700">
+                            {r.cumulativeCv}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
                 </div>
               </div>
             </div>
