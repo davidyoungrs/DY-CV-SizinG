@@ -526,16 +526,43 @@ export function synthesizeDrilledCageAndStress(params: {
     ? Math.max(Math.round(numRows), Math.min(36, minRowsForZeroDeadband))
     : Math.max(4, Math.min(36, Math.round(numRows)));
 
-  // Step 1: Assign hole diameters d_k and overlapping axial center elevations z_k
+  // Step 1: Assign characteristic-aware hole diameters d_k and overlapping axial center elevations z_k
   // so Row 1 cracks open immediately at z_bottom,1 = 0.0 mm (z_1 = R_1)
   // and Row N finishes opening right at z_top,N = H (z_N = H - R_N).
+  //
+  // For Equal-% trim, modulateHoleDiameter provides micro-orifices at low lift and larger orifices at high lift.
+  // For Quick-Opening trim, larger orifices are placed at low lift transitioning to standard orifices.
   const holeDias: number[] = [];
   for (let k = 1; k <= N_rows; k++) {
     const hNorm = (k - 0.5) / N_rows;
     let d_k = Math.max(1.5, Math.min(18.0, baseHoleDia_mm));
     if (modulateHoleDiameter) {
-      const scale = 0.72 + 0.36 * Math.pow(hNorm, 0.55);
-      d_k = Number(Math.max(1.6, baseHoleDia_mm * scale).toFixed(1));
+      let scale = 1.0;
+      switch (characteristicConfig.type) {
+        case 'EQUAL_PCT': {
+          // Rangeability modulation: smaller orifices at bottom (fine flow control), expanding at top
+          scale = 0.68 + 0.52 * Math.pow(hNorm, 1.35);
+          break;
+        }
+        case 'QUICK_OPENING': {
+          // Rapid initial area opening: larger orifices at low lift, tapering down
+          scale = 1.22 - 0.45 * Math.pow(hNorm, 0.75);
+          break;
+        }
+        case 'BI_LINEAR': {
+          const knee = characteristicConfig.biLinearKneeTravelPct
+            ? characteristicConfig.biLinearKneeTravelPct / 100
+            : 0.3;
+          scale = hNorm <= knee ? 0.72 : 1.15;
+          break;
+        }
+        case 'LINEAR':
+        default: {
+          scale = 0.85 + 0.30 * hNorm;
+          break;
+        }
+      }
+      d_k = Number(Math.max(1.5, baseHoleDia_mm * scale).toFixed(1));
     }
     holeDias.push(d_k);
   }
@@ -550,6 +577,39 @@ export function synthesizeDrilledCageAndStress(params: {
     const frac = N_rows > 1 ? k / (N_rows - 1) : 0.5;
     zCenters.push(Number((zStart + frac * (zEnd - zStart)).toFixed(2)));
   }
+
+  // Pre-calculate clean lift partitions and incremental phi for each row
+  // h_lower and h_upper cleanly partition the [0, 1] travel range across rows
+  const rowDeltaPhis: number[] = [];
+  for (let k = 0; k < N_rows; k++) {
+    const hLower = k === 0 ? 0 : (k - 0.5) / (N_rows - 1);
+    const hUpper = k === N_rows - 1 ? 1.0 : (k + 0.5) / (N_rows - 1);
+    const phiLower = evaluateInherentPhi(Math.max(0, Math.min(1, hLower)), characteristicConfig);
+    const phiUpper = evaluateInherentPhi(Math.max(0, Math.min(1, hUpper)), characteristicConfig);
+    const dPhi = Math.max(0.002, phiUpper - phiLower);
+    rowDeltaPhis.push(dPhi);
+  }
+  const maxRowDeltaPhi = Math.max(...rowDeltaPhis);
+
+  // Geometric maximum hole capacity per row based on physical circumference and ligament constraints
+  const nominalPz = N_rows > 1 ? (zEnd - zStart) / (N_rows - 1) : H;
+  const rowCapacities: number[] = [];
+  for (let k = 0; k < N_rows; k++) {
+    const d_k = holeDias[k];
+    const minP = reqPitchRatio * d_k;
+    const pCircLimit = Math.floor(circumference_mm / minP);
+    const pDiagLimit =
+      nominalPz < minP
+        ? Math.floor(circumference_mm / (2 * Math.sqrt(Math.max(0.25 * d_k * d_k, minP * minP - nominalPz * nominalPz))))
+        : pCircLimit;
+    const maxRowHoles = Math.max(2, Math.min(pCircLimit, pDiagLimit));
+    rowCapacities.push(maxRowHoles);
+  }
+  const peakRowCapacity = Math.max(...rowCapacities);
+
+  // Target holes for peak gradient row calibrated to ~85% of peak geometric capacity
+  // This ensures the pattern tracks characteristic gradient without saturating every row
+  const peakTargetHoles = Math.max(4, Math.floor(peakRowCapacity * 0.88));
 
   // Step 2: Sequential Target Curve Matching with Exact 2D Cylindrical Hole Collision Prevention
   // Guarantees ZERO hole-to-hole intersection and enforces center-to-center pitch P >= reqPitchRatio * d_avg
@@ -615,43 +675,14 @@ export function synthesizeDrilledCageAndStress(params: {
     const axialOverlapPct =
       k > 0 ? Number(((axialOverlap_mm / avgPairDia) * 100).toFixed(1)) : 100;
 
-    // Evaluate target area increment over this row's effective lift band
-    const hPrev = k === 0 ? 0 : Math.min(1, zCenters[k - 1] / H);
-    const hCurr = k === N_rows - 1 ? 1.0 : Math.min(1, z_k / H);
-    const phiPrev = evaluateInherentPhi(hPrev, characteristicConfig);
-    const phiCurr = evaluateInherentPhi(hCurr, characteristicConfig);
-    const deltaPhi = Math.max(1 / (N_rows * 3.5), phiCurr - phiPrev);
+    const deltaPhi = rowDeltaPhis[k];
+    const maxHolesGeometric = rowCapacities[k];
 
-    // Sibanda (2022) Eq. 5.10 Row Elevation Factor HT^0.15013
-    const HT_nonDim = Math.max(0.08, Math.min(1.0, z_k / H));
-    const sibandaElevationFactor = Number(
-      (0.93 + 0.14 * Math.pow(HT_nonDim, 0.15013)).toFixed(3)
-    );
-
-    const targetRowArea_mm2 =
-      (deltaPhi * requiredTotalArea_mm2) / sibandaElevationFactor;
-    const singleHoleArea_mm2 = (Math.PI / 4) * d_k * d_k;
-
-    // Geometric upper bound on n_k accounting for M_band interfering rows within dz < P_min!
-    const p_z_nominal = N_rows > 1 ? (zEnd - zStart) / (N_rows - 1) : H;
-    const minReqPitch_mm = reqPitchRatio * d_k;
-    const M_band = Math.max(
-      enforceZeroDeadbandOverlap ? 3 : 2,
-      Math.ceil(minReqPitch_mm / Math.max(0.5, p_z_nominal))
-    );
-    const minLateralSpacing_mm = Math.sqrt(
-      Math.max(0, minReqPitch_mm * minReqPitch_mm - p_z_nominal * p_z_nominal)
-    );
-    const effectiveMinCircumPitch_mm = Math.max(
-      minReqPitch_mm,
-      M_band * Math.max(minLateralSpacing_mm, d_k * 0.85)
-    );
-    const maxHolesGeometric = Math.max(
-      2,
-      Math.floor(circumference_mm / Math.max(d_k * 1.5, effectiveMinCircumPitch_mm))
-    );
-
-    let n_k = Math.max(2, Math.min(maxHolesGeometric, Math.round(targetRowArea_mm2 / singleHoleArea_mm2)));
+    // Compute characteristic-proportional hole target
+    // Combines area demand with the characteristic gradient normalized to peak capacity
+    const gradientRatio = maxRowDeltaPhi > 0 ? deltaPhi / maxRowDeltaPhi : 1 / N_rows;
+    const rawTargetHoles = Math.max(2, Math.round(peakTargetHoles * gradientRatio));
+    let n_k = Math.max(2, Math.min(maxHolesGeometric, rawTargetHoles));
 
     // Exact 2D cylindrical placement: search optimal angular phase offset and decrement n_k if any hole pair violates P >= reqPitchRatio * d_avg
     let bestOffset_deg = 0;
@@ -662,10 +693,10 @@ export function synthesizeDrilledCageAndStress(params: {
       let localBestOffset = 0;
       let localBestEval = { minRatio: -1, minLig_mm: -99, minPitch_mm: 0 };
 
-      // Test 18 phase angles within [0, pitchStepDeg)
-      const numPhases = 18;
+      // Test 36 phase angles within [0, pitchStepDeg)
+      const numPhases = 36;
       for (let p = 0; p < numPhases; p++) {
-        const candOffset = Number(((p / numPhases) * pitchStepDeg).toFixed(1));
+        const candOffset = Number(((p / numPhases) * pitchStepDeg).toFixed(2));
         const ev = evaluateMin2DRatioForCandidateRow(z_k, d_k, n_k, candOffset);
         if (ev.minRatio > localBestEval.minRatio) {
           localBestEval = ev;
@@ -698,8 +729,15 @@ export function synthesizeDrilledCageAndStress(params: {
     const ligWidth = Math.max(0.2, bestEval.minLig_mm);
     const ligEfficiency = ligWidth / Math.max(0.5, bestEval.minPitch_mm);
 
+    const singleHoleArea_mm2 = (Math.PI / 4) * d_k * d_k;
     const rowArea_mm2 = n_k * singleHoleArea_mm2;
     cumulativeFullArea_mm2 += rowArea_mm2;
+
+    // Sibanda (2022) Eq. 5.10 Row Elevation Factor HT^0.15013
+    const HT_nonDim = Math.max(0.08, Math.min(1.0, z_k / H));
+    const sibandaElevationFactor = Number(
+      (0.93 + 0.14 * Math.pow(HT_nonDim, 0.15013)).toFixed(3)
+    );
 
     const cumulativeTrimCv =
       0.0589 * C_d * cumulativeFullArea_mm2 * sibandaElevationFactor;
