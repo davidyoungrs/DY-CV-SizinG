@@ -92,6 +92,9 @@ export interface CaseSizingResult {
   bodyVelocity_m_s: number;
   bodyVelocityLimit_m_s: number;
   trimExitVelocity_m_s: number;
+  venaContractaVelocity_m_s: number;
+  trimKineticEnergy_kPa: number;
+  trimKineticEnergy_psi: number;
   outletMach: number;
   outletMachLimit: number;
   pipeMach: number;
@@ -838,6 +841,8 @@ export function evaluateOperatingCase(params: {
 
   let bodyVelocity_m_s = 0;
   let trimExitVelocity_m_s = 0;
+  let venaContractaVelocity_m_s = 0;
+  let trimKineticEnergy_kPa = 0;
   let outletMach = 0;
   // Warren Controls / IEC 60534-8-3 outlet Mach limits (1/3 sonic = 0.33 for DB II low noise, 0.50 for std DB I)
   const outletMachLimit = stages >= 2 ? 0.25 : stages >= 1 ? 0.33 : 0.45;
@@ -850,9 +855,18 @@ export function evaluateOperatingCase(params: {
   if (point.fluidPhase === 'LIQUID') {
     const Q_m3_s = point.flowRate / 3600;
     bodyVelocity_m_s = Q_m3_s / bodyArea_m2;
+    // Trim exit velocity based on effective pressure drop across active stages
     trimExitVelocity_m_s = Math.sqrt(
-      (2 * deltaP_effective * 1e5) / Math.max(100, point.rho_kg_m3)
+      (2 * (deltaP_effective / Math.max(1, stages)) * 1e5) / Math.max(100, point.rho_kg_m3)
     );
+    // Vena contracta jet velocity: U_vc = sqrt(2 * dP_effective / (rho * FL^2))
+    const FL_val = Math.max(0.3, FL_atTravel);
+    venaContractaVelocity_m_s = Math.sqrt(
+      (2 * deltaP_effective * 1e5) / (Math.max(100, point.rho_kg_m3) * Math.pow(FL_val, 2))
+    );
+    // Dynamic fluid kinetic energy head KE = 0.5 * rho * v^2 in kPa
+    trimKineticEnergy_kPa = (0.5 * point.rho_kg_m3 * Math.pow(trimExitVelocity_m_s, 2)) / 1000;
+
     const cL = Math.max(500, point.speedOfSound_m_s);
     fluidSoundSpeed_m_s = cL;
     outletMach = bodyVelocity_m_s / cL;
@@ -905,6 +919,26 @@ export function evaluateOperatingCase(params: {
     );
     bodyVelocityLimit_m_s = outletMachLimit * sonicSpeed_m_s;
 
+    // IEC 60534-8-3 Vena Contracta Jet Mach and Velocity
+    const x_ratio = deltaP / P1;
+    const gamma = Math.max(1.05, point.gammaCpCv);
+    const x_choked_limit = (gamma / 1.4) * Math.max(0.1, xT_atTravel);
+    if (x_ratio >= x_choked_limit) {
+      // Sonic/choked throat
+      venaContractaVelocity_m_s = Math.sqrt(((2 * gamma) / (gamma + 1)) * R_specific * T1_K * Z_eff);
+    } else {
+      const p_vc_ratio = Math.max(0.05, 1 - x_ratio / Math.max(0.1, Math.pow(FL_atTravel, 2)));
+      const mach_vc = Math.min(
+        1.0,
+        Math.sqrt((2 / (gamma - 1)) * (Math.pow(1 / p_vc_ratio, (gamma - 1) / gamma) - 1))
+      );
+      const T_vc_K = T1_K / (1 + ((gamma - 1) / 2) * Math.pow(mach_vc, 2));
+      venaContractaVelocity_m_s = mach_vc * Math.sqrt(gamma * R_specific * T_vc_K * Z_eff);
+    }
+
+    // Dynamic fluid kinetic energy head KE = 0.5 * rho * v^2 in kPa
+    trimKineticEnergy_kPa = (0.5 * rhoDownstream * Math.pow(trimExitVelocity_m_s, 2)) / 1000;
+
     // Thiruvengadam water-hammer stress check (droplet impact in Two-Phase / wet steam vs gas)
     const impactRho = point.fluidPhase === 'TWO_PHASE' ? point.rho_kg_m3 : rhoDownstream;
     const impactC =
@@ -913,6 +947,8 @@ export function evaluateOperatingCase(params: {
     waterHammerSurfacePressure_MPa =
       (dropletFactor * impactRho * impactC * trimExitVelocity_m_s) / 1e6;
   }
+
+  const trimKineticEnergy_psi = trimKineticEnergy_kPa * 0.1450377;
 
   const thiruvengadamErosionRatioPct = Number(
     ((waterHammerSurfacePressure_MPa / Math.max(10, thiruvengadamEnduranceLimit_MPa)) * 100).toFixed(1)
@@ -1068,6 +1104,9 @@ export function evaluateOperatingCase(params: {
     bodyVelocity_m_s: Number(bodyVelocity_m_s.toFixed(2)),
     bodyVelocityLimit_m_s: Number(bodyVelocityLimit_m_s.toFixed(1)),
     trimExitVelocity_m_s: Number(trimExitVelocity_m_s.toFixed(1)),
+    venaContractaVelocity_m_s: Number(venaContractaVelocity_m_s.toFixed(1)),
+    trimKineticEnergy_kPa: Number(trimKineticEnergy_kPa.toFixed(1)),
+    trimKineticEnergy_psi: Number(trimKineticEnergy_psi.toFixed(1)),
     outletMach: Number(outletMach.toFixed(3)),
     outletMachLimit,
     pipeMach: Number(pipeMach.toFixed(3)),

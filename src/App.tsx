@@ -2066,6 +2066,46 @@ export default function App() {
 
                       <tr className="hover:bg-[#f8fafc]">
                         <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Trim Exit / Vena Contracta
+                        </th>
+                        {caseResults.map((r) => {
+                          const trimVelWarn = r.trimExitVelocity_m_s > 30;
+                          return (
+                            <td key={r.id} className="py-2.5 px-3">
+                              <div className="flex flex-col">
+                                <span className={trimVelWarn ? 'text-amber-600 font-bold' : 'text-[#0b2545] font-semibold'}>
+                                  {r.trimExitVelocity_m_s} m/s
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  U_vc: {r.venaContractaVelocity_m_s} m/s
+                                </span>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
+                          Trim Kinetic Energy Head
+                        </th>
+                        {caseResults.map((r) => {
+                          const keHigh = r.trimKineticEnergy_psi > 70;
+                          return (
+                            <td key={r.id} className="py-2.5 px-3">
+                              <span className={keHigh ? 'text-amber-600 font-bold' : 'text-[#0b2545]'}>
+                                {r.trimKineticEnergy_kPa} kPa
+                              </span>
+                              <span className="ml-1 text-[10px] text-slate-500">
+                                ({r.trimKineticEnergy_psi} psi)
+                              </span>
+                            </td>
+                          );
+                        })}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc]">
+                        <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
                           Strouhal f_p (Hz)
                         </th>
                         {caseResults.map((r) => (
