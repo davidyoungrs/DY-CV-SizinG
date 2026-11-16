@@ -462,6 +462,25 @@ export interface CageSynthesisAndStressResult {
   maxDrillAspectRatio: number;
   distinctDrillSizes_mm: number[];
   drillManufacturabilityStatus: 'PASS' | 'WARNING' | 'CRITICAL';
+  // Multi-Stage Concentric Sleeve / Labyrinth Stack
+  numConcentricStages: 1 | 2 | 3;
+  concentricStages: {
+    stageIndex: number;
+    sleeveID_mm: number;
+    sleeveOD_mm: number;
+    areaRatioToStage1: number;
+    targetArea_mm2: number;
+    stageDeltaP_bar: number;
+    stagePressureDropSharePct: number;
+    stageHoleDia_mm: number;
+  }[];
+  // Per-Sector Asymmetric Circumferential Drilling Compensation (Sibanda Eq. 5.10)
+  compensateGalleryAsymmetry: boolean;
+  sectorCompensationFactors: {
+    sectorAngleDeg: number;
+    sibandaFactor: number;
+    compensatedAreaMultiplier: number;
+  }[];
 }
 
 /**
@@ -494,6 +513,8 @@ export function synthesizeDrilledCageAndStress(params: {
   holeSpacingRule?: HoleSpacingRuleId; // Defaults to 'STD_HIGH_CAP_1_75D'
   ratedValveCv?: number; // Total rated valve body Cv (e.g. 104 for DN80)
   maxProcessRequiredCv?: number; // Maximum process required Cv from active operating conditions
+  numConcentricStages?: 1 | 2 | 3; // Multi-stage concentric sleeve count (default 1)
+  compensateGalleryAsymmetry?: boolean; // Per-sector Sibanda Eq. 5.10 inverse compensation
 }): CageSynthesisAndStressResult {
   const {
     cageID_mm,
@@ -517,6 +538,8 @@ export function synthesizeDrilledCageAndStress(params: {
     holeSpacingRule = 'STD_HIGH_CAP_1_75D',
     ratedValveCv,
     maxProcessRequiredCv,
+    numConcentricStages = 1,
+    compensateGalleryAsymmetry = false,
   } = params;
 
   const spacingRuleSpec = HOLE_SPACING_RULES[holeSpacingRule];
@@ -1130,6 +1153,59 @@ export function synthesizeDrilledCageAndStress(params: {
     maxDrillAspectRatio,
     distinctDrillSizes_mm,
     drillManufacturabilityStatus,
+    ...(() => {
+      // Multi-stage concentric sleeve expanding area ratios (A1 : A2 : A3)
+      const areaRatios =
+        numConcentricStages === 1
+          ? [1.0]
+          : numConcentricStages === 2
+          ? [1.0, 1.35]
+          : [1.0, 1.32, 1.75];
+      const invA2Sum = areaRatios.reduce((acc, r) => acc + 1 / (r * r), 0);
+      const concentricStages = areaRatios.map((ratio, idx) => {
+        const stageShare = (1 / (ratio * ratio)) / invA2Sum;
+        const radialOffset = idx * (t_wall + 4.0);
+        const sID = Number((D_ID + 2 * radialOffset).toFixed(1));
+        const sOD = Number((sID + 2 * t_wall).toFixed(1));
+        return {
+          stageIndex: idx + 1,
+          sleeveID_mm: sID,
+          sleeveOD_mm: sOD,
+          areaRatioToStage1: ratio,
+          targetArea_mm2: Number((cumulativeFullArea_mm2 * ratio).toFixed(1)),
+          stageDeltaP_bar: Number((shutoffDeltaP_bar * stageShare).toFixed(2)),
+          stagePressureDropSharePct: Number((stageShare * 100).toFixed(1)),
+          stageHoleDia_mm: Number(Math.max(1.5, meanHoleDia_mm * (idx === 0 ? 1.0 : 0.85)).toFixed(2)),
+        };
+      });
+
+      // Per-sector asymmetric circumferential compensation using Sibanda Eq. 5.10 inverse weights
+      const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+      const rawFactors = angles.map((ang) =>
+        evaluateSibandaLocalHoleFactor({
+          angle_deg: ang,
+          zElevation_mm: 0.5 * H,
+          stroke_mm: H,
+          holeDia_mm: meanHoleDia_mm,
+          cageID_mm: D_ID,
+        }).relativeWeight
+      );
+      const meanRaw = rawFactors.reduce((a, b) => a + b, 0) / rawFactors.length;
+      const sectorCompensationFactors = angles.map((ang, i) => ({
+        sectorAngleDeg: ang,
+        sibandaFactor: Number(rawFactors[i].toFixed(3)),
+        compensatedAreaMultiplier: compensateGalleryAsymmetry
+          ? Number((meanRaw / Math.max(0.5, rawFactors[i])).toFixed(3))
+          : 1.0,
+      }));
+
+      return {
+        numConcentricStages,
+        concentricStages,
+        compensateGalleryAsymmetry,
+        sectorCompensationFactors,
+      };
+    })(),
   };
 }
 

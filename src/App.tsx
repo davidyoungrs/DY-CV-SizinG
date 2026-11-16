@@ -110,9 +110,20 @@ import {
   evaluateActuatorAndStemSizing,
 } from './engine/actuatorAndStemEngine';
 
+import {
+  BODY_MATERIAL_GROUPS,
+  BodyMaterialGroupId,
+  EndConnectionId,
+  evaluateAsmeB1634Rating,
+  evaluateNaceScreening,
+  evaluateFugitiveEmissions,
+  evaluatePipingAndBodyStandards,
+  evaluateSilAndPositioner,
+} from './engine/industryStandards';
+
 // Application revision displayed in the header title bar & browser tab.
-// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.5) unless minor/major escalation is requested.
-export const APP_VERSION = '1.0.4';
+// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.6) unless minor/major escalation is requested.
+export const APP_VERSION = '1.0.5';
 
 type ActiveTabId =
   | 'PROCESS_SIZING'
@@ -339,6 +350,17 @@ export default function App() {
   const [cageMaterial, setCageMaterial] = useState<CageMaterialId>('SS410_HT');
   const [requireNaceSourService, setRequireNaceSourService] = useState<boolean>(false);
   const [livePlugTravelPct, setLivePlugTravelPct] = useState<number>(68);
+  const [numConcentricStages, setNumConcentricStages] = useState<1 | 2 | 3>(1);
+  const [compensateGalleryAsymmetry, setCompensateGalleryAsymmetry] = useState<boolean>(false);
+
+  // Industry Standards & Body/Safety Specifications State
+  const [bodyMaterial, setBodyMaterial] = useState<BodyMaterialGroupId>('WCB_1_1');
+  const [endConnection, setEndConnection] = useState<EndConnectionId>('RF_FLANGED');
+  const [h2sPartialPressure_bar, setH2sPartialPressure_bar] = useState<number>(0);
+  const [chloride_ppm, setChloride_ppm] = useState<number>(50);
+  const [fireSafeRequired, setFireSafeRequired] = useState<boolean>(false);
+  const [silServiceEnabled, setSilServiceEnabled] = useState<boolean>(false);
+  const [targetSilLevel, setTargetSilLevel] = useState<'NONE' | 'SIL_1' | 'SIL_2' | 'SIL_3'>('NONE');
 
   // 5. Transient Thermal Binding State
   const [coldRadialClearance_mm, setColdRadialClearance_mm] = useState<number>(0.18);
@@ -545,6 +567,8 @@ export default function App() {
         requireNaceSourService,
         ratedValveCv: correlatedValve.ratedCv,
         maxProcessRequiredCv,
+        numConcentricStages,
+        compensateGalleryAsymmetry,
       }),
     [
       correlatedValve,
@@ -563,6 +587,8 @@ export default function App() {
       cageMaterial,
       requireNaceSourService,
       maxProcessRequiredCv,
+      numConcentricStages,
+      compensateGalleryAsymmetry,
     ]
   );
 
@@ -615,6 +641,7 @@ export default function App() {
         useExtendedStroke,
         characteristicType: effectiveCharConfig.type,
         equalPctRangeability: effectiveCharConfig.equalPctRangeability,
+        bodyMaterial,
       }),
     [
       effectiveOperatingCases,
@@ -626,6 +653,7 @@ export default function App() {
       useExtendedStroke,
       effectiveCharConfig.type,
       effectiveCharConfig.equalPctRangeability,
+      bodyMaterial,
     ]
   );
 
@@ -725,6 +753,98 @@ export default function App() {
       benchSetLower_bar_g,
       benchSetUpper_bar_g,
       stemMaterial,
+    ]
+  );
+
+  // Industry Standards & Specifications Evaluations (ASME B16.34, NACE MR0175, ISO 15848, ISA-75.08, SIL/ISA-75.25)
+  const minOperatingTemp_degC = useMemo(
+    () => Math.min(...effectiveOperatingCases.filter((c) => c.enabled).map((c) => c.T1_degC), 20),
+    [effectiveOperatingCases]
+  );
+
+  const asmeB1634Result = useMemo(
+    () =>
+      evaluateAsmeB1634Rating(
+        pressureClass,
+        bodyMaterial,
+        maxUpstreamP1_bar_a,
+        maxOperatingTemp_degC
+      ),
+    [pressureClass, bodyMaterial, maxUpstreamP1_bar_a, maxOperatingTemp_degC]
+  );
+
+  const naceScreeningResult = useMemo(
+    () =>
+      evaluateNaceScreening({
+        sourServiceEnabled: requireNaceSourService,
+        h2sPartialPressure_bar,
+        chloride_ppm,
+        operatingTemp_degC: maxOperatingTemp_degC,
+        cageMaterialId: cageMaterial,
+        stemMaterialId: stemMaterial,
+      }),
+    [
+      requireNaceSourService,
+      h2sPartialPressure_bar,
+      chloride_ppm,
+      maxOperatingTemp_degC,
+      cageMaterial,
+      stemMaterial,
+    ]
+  );
+
+  const fugitiveEmissionsSpec = useMemo(
+    () =>
+      evaluateFugitiveEmissions(
+        packingType,
+        requireLethalBellowsSeal,
+        maxOperatingTemp_degC
+      ),
+    [packingType, requireLethalBellowsSeal, maxOperatingTemp_degC]
+  );
+
+  const pipingBodyStandards = useMemo(
+    () =>
+      evaluatePipingAndBodyStandards({
+        dn: selectedDN,
+        classId: pressureClass,
+        endConnection,
+        fireSafeRequired,
+        packingType,
+        shutoffClass,
+        minTemp_degC: minOperatingTemp_degC,
+      }),
+    [
+      selectedDN,
+      pressureClass,
+      endConnection,
+      fireSafeRequired,
+      packingType,
+      shutoffClass,
+      minOperatingTemp_degC,
+    ]
+  );
+
+  const silPositionerResult = useMemo(
+    () =>
+      evaluateSilAndPositioner({
+        silServiceEnabled,
+        targetSilLevel,
+        stroke_mm: correlatedValve.stroke_mm,
+        actuatorEffectiveArea_cm2: actuatorArea_cm2,
+        airSupplyPressure_bar_g: airSupply_bar_g,
+        packingFrictionForceC_N: actuatorStemResult.balanced.packingFrictionForceC_N,
+        benchSetSpan_bar: Math.max(0.2, benchSetUpper_bar_g - benchSetLower_bar_g),
+      }),
+    [
+      silServiceEnabled,
+      targetSilLevel,
+      correlatedValve.stroke_mm,
+      actuatorArea_cm2,
+      airSupply_bar_g,
+      actuatorStemResult.balanced.packingFrictionForceC_N,
+      benchSetUpper_bar_g,
+      benchSetLower_bar_g,
     ]
   );
 
@@ -1986,6 +2106,104 @@ export default function App() {
                         className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
                       />
                     </div>
+                  </div>
+                </div>
+
+                {/* Industry Standards Strip: ASME B16.34 P-T, ISA-75.08.01 Face-to-Face, NACE MR0175, Fire-Safe */}
+                <div className="pt-4 border-t border-[#e2e8f0] grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
+                  <div className="lg:col-span-3">
+                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      Body Material (ASME B16.34 Group)
+                    </label>
+                    <select
+                      value={bodyMaterial}
+                      onChange={(e) => setBodyMaterial(e.target.value as BodyMaterialGroupId)}
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                    >
+                      {Object.values(BODY_MATERIAL_GROUPS).map((m) => (
+                        <option key={m.id} value={m.id}>
+                          {m.name} ({m.asmeGroup})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      End Connection (ISA-75.08)
+                    </label>
+                    <select
+                      value={endConnection}
+                      onChange={(e) => setEndConnection(e.target.value as EndConnectionId)}
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                    >
+                      <option value="RF_FLANGED">ASME B16.5 RF</option>
+                      <option value="RTJ_FLANGED">ASME B16.5 RTJ</option>
+                      <option value="BUTT_WELD">ASME B16.25 BW</option>
+                    </select>
+                  </div>
+                  <div className="lg:col-span-2">
+                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      H₂S Partial P (bar) / Cl⁻ (ppm)
+                    </label>
+                    <div className="flex gap-1.5">
+                      <input
+                        type="number"
+                        step="0.01"
+                        min="0"
+                        value={h2sPartialPressure_bar}
+                        onChange={(e) => setH2sPartialPressure_bar(Number(e.target.value))}
+                        className="w-1/2 bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        title="H2S partial pressure (bar)"
+                      />
+                      <input
+                        type="number"
+                        step="50"
+                        min="0"
+                        value={chloride_ppm}
+                        onChange={(e) => setChloride_ppm(Number(e.target.value))}
+                        className="w-1/2 bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        title="Chloride concentration (ppm)"
+                      />
+                    </div>
+                  </div>
+                  <div className="lg:col-span-5 flex flex-wrap items-center gap-3">
+                    <label className="flex items-center gap-1.5 text-xs font-mono text-[#0b2545] cursor-pointer bg-[#f8fafc] border border-[#cfd8e3] rounded px-2.5 py-1.5">
+                      <input
+                        type="checkbox"
+                        checked={fireSafeRequired}
+                        onChange={(e) => setFireSafeRequired(e.target.checked)}
+                        className="accent-[#0f8b8d]"
+                      />
+                      Fire-Safe (API 607)
+                    </label>
+                    <div
+                      className={`px-2.5 py-1.5 rounded border text-[11px] font-mono ${
+                        asmeB1634Result.isCompliant
+                          ? 'bg-emerald-50 border-emerald-200 text-emerald-800'
+                          : 'bg-red-50 border-red-200 text-red-700 font-bold'
+                      }`}
+                      title={asmeB1634Result.note}
+                    >
+                      B16.34: {asmeB1634Result.designPressureBarG} / {asmeB1634Result.maxAllowableBarG} bar g ({asmeB1634Result.utilizationPct}%)
+                    </div>
+                    <div className="px-2.5 py-1.5 rounded border border-[#cfd8e3] bg-[#f8fafc] text-[11px] font-mono text-[#13315c]">
+                      F2F: {pipingBodyStandards.faceToFace_mm} mm • Run: {pipingBodyStandards.minUpstreamStraightRun_mm}/{pipingBodyStandards.minDownstreamStraightRun_mm} mm
+                    </div>
+                    {!pipingBodyStandards.fireSafeCompliant && (
+                      <div className="px-2.5 py-1.5 rounded border border-red-200 bg-red-50 text-[11px] font-mono text-red-700 font-semibold">
+                        API 607: Switch to Graphite Packing
+                      </div>
+                    )}
+                    {pipingBodyStandards.cryogenicExtendedBonnetRequired && (
+                      <div className="px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-[11px] font-mono text-amber-800 font-semibold">
+                        BS 6364 Cryogenic Bonnet Req.
+                      </div>
+                    )}
+                    {naceScreeningResult.warnings.length > 0 && (
+                      <div className="px-2.5 py-1.5 rounded border border-amber-200 bg-amber-50 text-[11px] font-mono text-amber-800">
+                        NACE: {naceScreeningResult.warnings[0]}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>
@@ -3283,20 +3501,32 @@ export default function App() {
 
                       <tr className="hover:bg-[#f8fafc]">
                         <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
-                          Body Vel / Mach
+                          Body Vel / Mach / API 14E
                         </th>
                         {caseResults.map((r) => (
                           <td key={r.id} className="py-2.5 px-3">
-                            <span
-                              className={
-                                r.bodyVelocity_m_s > r.bodyVelocityLimit_m_s ||
-                                r.outletMach > r.outletMachLimit
-                                  ? 'text-red-600 font-bold'
-                                  : 'text-[#0b2545]'
-                              }
-                            >
-                              {r.bodyVelocity_m_s} m/s (M={r.outletMach})
-                            </span>
+                            <div className="flex flex-col">
+                              <span
+                                className={
+                                  r.bodyVelocity_m_s > r.bodyVelocityLimit_m_s ||
+                                  r.outletMach > r.outletMachLimit
+                                    ? 'text-red-600 font-bold'
+                                    : 'text-[#0b2545]'
+                                }
+                              >
+                                {r.bodyVelocity_m_s} m/s (M={r.outletMach})
+                              </span>
+                              <span
+                                className={`text-[10px] ${
+                                  r.erosionalVelocityRatio > 1.0
+                                    ? 'text-red-600 font-bold'
+                                    : 'text-slate-500'
+                                }`}
+                              >
+                                Ve={r.erosionalVelocity_m_s} m/s ({r.erosionalVelocityRatio}x)
+                                {r.expandedOutletRecommended ? ' • Exp. Outlet' : ''}
+                              </span>
+                            </div>
                           </td>
                         ))}
                       </tr>
@@ -4411,6 +4641,66 @@ export default function App() {
                       <p className="text-[10px] font-mono text-slate-500 mt-1">
                         Auto-syncs Tab 4 Cage Alloy ({THERMAL_ALLOYS[cageAlloy].name}) &amp; anti-galling check
                       </p>
+                    </div>
+
+                    {/* Multi-Stage Concentric Sleeve & Sibanda 360° Asymmetric Drilling */}
+                    <div className="p-3 rounded-lg bg-[#f8fafc] border border-[#cfd8e3] space-y-2.5">
+                      <div className="flex items-center justify-between gap-2">
+                        <span className="text-[11px] font-mono font-bold text-[#13315c] uppercase">
+                          Concentric Sleeve Stack (ΔP Letdown)
+                        </span>
+                        <div className="flex gap-1">
+                          {([1, 2, 3] as const).map((st) => (
+                            <button
+                              key={st}
+                              type="button"
+                              onClick={() => setNumConcentricStages(st)}
+                              className={`px-2 py-0.5 rounded text-[11px] font-mono font-bold border ${
+                                numConcentricStages === st
+                                  ? 'bg-[#0f8b8d] text-white border-[#0f8b8d]'
+                                  : 'bg-white text-[#13315c] border-[#cfd8e3] hover:bg-slate-100'
+                              }`}
+                            >
+                              {st}-Stage
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                      <div className="grid grid-cols-1 gap-1 text-[10.5px] font-mono">
+                        {cageSynthesis.concentricStages.map((s) => (
+                          <div
+                            key={s.stageIndex}
+                            className="flex items-center justify-between bg-white px-2 py-1 rounded border border-[#e2e8f0]"
+                          >
+                            <span className="font-bold text-[#0b2545]">
+                              Stage {s.stageIndex} (ID {s.sleeveID_mm} mm)
+                            </span>
+                            <span className="text-slate-600">
+                              A={s.targetArea_mm2} mm² ({s.areaRatioToStage1}x)
+                            </span>
+                            <span className="text-[#0f8b8d] font-bold">
+                              ΔP={s.stageDeltaP_bar} bar ({s.stagePressureDropSharePct}%)
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                      <label className="flex items-center gap-2 text-[11px] font-mono text-[#0b2545] cursor-pointer pt-1">
+                        <input
+                          type="checkbox"
+                          checked={compensateGalleryAsymmetry}
+                          onChange={(e) => setCompensateGalleryAsymmetry(e.target.checked)}
+                          className="accent-[#0f8b8d]"
+                        />
+                        Sibanda Eq. 5.10 Asymmetric 360° Sector Drilling Compensation
+                      </label>
+                      {compensateGalleryAsymmetry && (
+                        <div className="text-[10px] font-mono text-slate-600 bg-white px-2 py-1 rounded border border-[#e2e8f0]">
+                          Sector Area Multipliers (0°→315°):{' '}
+                          {cageSynthesis.sectorCompensationFactors
+                            .map((f) => `${f.sectorAngleDeg}°:${f.compensatedAreaMultiplier}x`)
+                            .join(' | ')}
+                        </div>
+                      )}
                     </div>
 
                     <div className="grid grid-cols-2 gap-3">
@@ -5994,12 +6284,92 @@ export default function App() {
                       />
                     </div>
                   </div>
+
+                  {/* SIL / Functional Safety (IEC 61508 / 61511) */}
+                  <div className="pt-3 border-t border-[#e2e8f0] space-y-2">
+                    <div className="flex items-center justify-between">
+                      <label className="flex items-center gap-2 text-xs font-mono font-semibold text-[#13315c] cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={silServiceEnabled}
+                          onChange={(e) => {
+                            const checked = e.target.checked;
+                            setSilServiceEnabled(checked);
+                            if (checked && targetSilLevel === 'NONE') setTargetSilLevel('SIL_2');
+                            if (!checked) setTargetSilLevel('NONE');
+                          }}
+                          className="accent-[#0f8b8d]"
+                        />
+                        SIS / ESD Safety Service (IEC 61508)
+                      </label>
+                      {silServiceEnabled && (
+                        <select
+                          value={targetSilLevel}
+                          onChange={(e) => setTargetSilLevel(e.target.value as 'NONE' | 'SIL_1' | 'SIL_2' | 'SIL_3')}
+                          className="bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0f8b8d] font-bold"
+                        >
+                          <option value="SIL_1">SIL 1</option>
+                          <option value="SIL_2">SIL 2</option>
+                          <option value="SIL_3">SIL 3</option>
+                        </select>
+                      )}
+                    </div>
+                  </div>
                 </div>
               </div>
             </div>
 
             {/* Right Column: Side-by-Side Unbalanced vs Balanced Thrust & Stem Buckling Verification */}
             <div className="lg:col-span-8 space-y-6">
+              {/* Fugitive Emissions (ISO 15848-1), Stick-Slip Deadband (ISA-75.25) & SIL / Stroking Time */}
+              <div className="dy-card overflow-hidden">
+                <div className="section-band px-4 py-2.5 flex items-center justify-between">
+                  <h3 className="text-xs font-bold text-white uppercase tracking-wider">
+                    Fugitive Emissions (ISO 15848-1 / API 622), Positioner Deadband (ISA-75.25) &amp; SIL / T90
+                  </h3>
+                  <span className="text-[11px] font-mono text-[#f2a900] font-bold">
+                    Class {fugitiveEmissionsSpec.iso15848TightnessClass} • Deadband {silPositionerResult.deadbandPctOfTravel}%
+                  </span>
+                </div>
+                <div className="p-4 grid grid-cols-1 md:grid-cols-3 gap-3 text-xs font-mono">
+                  <div className="p-3 rounded-lg bg-[#f8fafc] border border-[#cfd8e3] space-y-1">
+                    <div className="text-[10px] uppercase text-slate-500 font-bold">ISO 15848-1 / API 622</div>
+                    <div className="font-bold text-[#0b2545]">{fugitiveEmissionsSpec.label}</div>
+                    <div className="text-[11px] text-slate-600">
+                      Endurance: {fugitiveEmissionsSpec.iso15848EnduranceClass} • Stem Finish: {fugitiveEmissionsSpec.stemFinishRa_um}
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-[#f8fafc] border border-[#cfd8e3] space-y-1">
+                    <div className="text-[10px] uppercase text-slate-500 font-bold">ISA-75.25.01 Deadband Budget</div>
+                    <div
+                      className={`font-bold ${
+                        silPositionerResult.stickSlipRisk === 'HIGH'
+                          ? 'text-red-600'
+                          : silPositionerResult.stickSlipRisk === 'MODERATE'
+                          ? 'text-amber-600'
+                          : 'text-emerald-700'
+                      }`}
+                    >
+                      {silPositionerResult.deadbandPctOfTravel}% of Travel ({silPositionerResult.stickSlipRisk} Risk)
+                    </div>
+                    <div className="text-[11px] text-slate-600">
+                      Packing Friction: {actuatorStemResult.balanced.packingFrictionForceC_N} N
+                    </div>
+                  </div>
+                  <div className="p-3 rounded-lg bg-[#f8fafc] border border-[#cfd8e3] space-y-1">
+                    <div className="text-[10px] uppercase text-slate-500 font-bold">IEC 61508/61511 SIL &amp; Stroking</div>
+                    <div className="font-bold text-[#0b2545]">
+                      Est. T90: {silPositionerResult.estimatedStrokeTime_s}s {silPositionerResult.pstReady ? `(${targetSilLevel.replace('_', ' ')} PST)` : '(Control)'}
+                    </div>
+                    <div className="text-[11px] text-slate-600">
+                      {silPositionerResult.volumeBoosterRecommended
+                        ? 'Volume Booster / Quick-Exhaust Recommended'
+                        : 'Direct Positioner Air Delivery OK'}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
               {/* Seal/Shutoff Compatibility & FTO/FTC Directional Stability Alerts */}
               <div className="dy-card overflow-hidden">
                 <div className="p-4 space-y-2.5 text-xs font-mono">
@@ -6601,6 +6971,24 @@ export default function App() {
                   <td className="border border-slate-400 px-2 py-1 font-bold">Characteristic &amp; Authority</td>
                   <td className="border border-slate-400 px-2 py-1">
                     {effectiveCharConfig.type} (Pv={effectiveCharConfig.valveAuthorityPv.toFixed(2)}) • EnTec Band {charSimulation.stabilityBandCoveragePct}% • Ratio {charSimulation.gainRatioWorkingSpan}:1
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Body Mat. &amp; ASME B16.34</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {BODY_MATERIAL_GROUPS[bodyMaterial].astmSpec} ({asmeB1634Result.designPressureBarG} / {asmeB1634Result.maxAllowableBarG} bar g @ {asmeB1634Result.designTempDegC}°C) [{asmeB1634Result.isCompliant ? 'PASS' : 'FAIL'}]
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">End Conn. / F2F (ISA-75.08)</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    {pipingBodyStandards.endConnectionLabel} | F2F: {pipingBodyStandards.faceToFace_mm} mm | Run: {pipingBodyStandards.minUpstreamStraightRun_mm}/{pipingBodyStandards.minDownstreamStraightRun_mm} mm
+                  </td>
+                </tr>
+                <tr>
+                  <td className="border border-slate-400 px-2 py-1 font-bold">Emissions / Fire / SIL</td>
+                  <td className="border border-slate-400 px-2 py-1">
+                    ISO 15848 Class {fugitiveEmissionsSpec.iso15848TightnessClass} | API 607: {fireSafeRequired ? (pipingBodyStandards.fireSafeCompliant ? 'COMPLIANT' : 'NON-COMPLIANT') : 'N/A'} | {silServiceEnabled ? `${targetSilLevel.replace('_', ' ')} (T90=${silPositionerResult.estimatedStrokeTime_s}s)` : 'Control'}
                   </td>
                 </tr>
               </tbody>

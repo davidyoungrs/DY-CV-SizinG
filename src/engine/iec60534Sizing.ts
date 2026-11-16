@@ -103,6 +103,10 @@ export interface CaseSizingResult {
   waterHammerSurfacePressure_MPa: number;
   thiruvengadamEnduranceLimit_MPa: number;
   thiruvengadamErosionRatioPct: number;
+  // API RP 14E Erosional Velocity & Expanded Outlet Check
+  erosionalVelocity_m_s: number;
+  erosionalVelocityRatio: number;
+  expandedOutletRecommended: boolean;
   // Acoustic Noise (IEC 60534-8-3 / 8-4 + Masoneilan Expander Noise + Pulsation + OSHA/NIOSH)
   strouhalPeakFreq_Hz: number;
   ringFreq_Hz: number;
@@ -1115,6 +1119,24 @@ export function evaluateOperatingCase(params: {
     waterHammerSurfacePressure_MPa: Number(waterHammerSurfacePressure_MPa.toFixed(1)),
     thiruvengadamEnduranceLimit_MPa,
     thiruvengadamErosionRatioPct,
+    ...(() => {
+      // API RP 14E Erosional Velocity: Ve = C / sqrt(rho_m) with C = 122 (metric continuous service)
+      const rho_mix =
+        point.fluidPhase === 'LIQUID'
+          ? regime === 'FLASHING'
+            ? Math.max(10, point.rho_kg_m3 * 0.25) // flashing two-phase mixture density drop
+            : Math.max(100, point.rho_kg_m3)
+          : Math.max(0.5, (P2 * 1e5 * point.molecularWeight) / (8314.46 * T1_K * point.compressibilityZ));
+      const erosionalVelocity_m_s = 122 / Math.sqrt(rho_mix);
+      const erosionalVelocityRatio = bodyVelocity_m_s / Math.max(0.1, erosionalVelocity_m_s);
+      const expandedOutletRecommended =
+        erosionalVelocityRatio > 1.0 || outletMach > outletMachLimit || regime === 'FLASHING';
+      return {
+        erosionalVelocity_m_s: Number(erosionalVelocity_m_s.toFixed(1)),
+        erosionalVelocityRatio: Number(erosionalVelocityRatio.toFixed(2)),
+        expandedOutletRecommended,
+      };
+    })(),
     strouhalPeakFreq_Hz,
     ringFreq_Hz,
     coincidenceFreq_Hz,

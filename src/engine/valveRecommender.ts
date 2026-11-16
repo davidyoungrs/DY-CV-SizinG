@@ -11,6 +11,8 @@ import type {
 } from './valveSchedule.ts';
 import { evaluateOperatingCase } from './iec60534Sizing.ts';
 import type { OperatingPointInput, PipingConfiguration } from './iec60534Sizing.ts';
+import { evaluateAsmeB1634Rating } from './industryStandards.ts';
+import type { BodyMaterialGroupId } from './industryStandards.ts';
 
 export interface ValveSelectionRecommendation {
   recommendedDN: number;
@@ -67,6 +69,7 @@ export function recommendValveSizeAndRating(params: {
   useExtendedStroke: boolean;
   characteristicType?: 'LINEAR' | 'EQUAL_PCT' | 'MODIFIED_EQUAL_PCT' | 'BI_LINEAR' | 'QUICK_OPENING' | 'MODIFIED_PARABOLIC' | 'CUSTOM_SPLINE' | 'AUTO_FIT_CONSTANT_GAIN';
   equalPctRangeability?: number;
+  bodyMaterial?: BodyMaterialGroupId;
 }): ValveSelectionRecommendation {
   const activeCases = params.cases.filter((c) => c.enabled);
   const lifeCycleYears = 10;
@@ -108,18 +111,10 @@ export function recommendValveSizeAndRating(params: {
   const Q_L_s = Math.max(0.5, Q_m3_h / 3.6);
   const SG = normalCase.fluidPhase === 'LIQUID' ? (normalCase.rho_kg_m3 || 998) / 1000 : 0.85;
 
-  // Pressure Class Selection logic
-  // CL150: max ~19.6 bar at 20°C, drops to ~13 bar at 200°C
-  // CL300: max ~51.1 bar at 20°C, drops to ~43 bar at 200°C
-  // CL600: max ~102.1 bar at 20°C
-  let selectedClass: PressureClassId = 'CL150_PN16';
-  if (maxP1 > 100 || (maxP1 > 85 && maxT > 150)) {
-    selectedClass = 'CL900_PN160';
-  } else if (maxP1 > 48 || (maxP1 > 38 && maxT > 150)) {
-    selectedClass = 'CL600_PN100';
-  } else if (maxP1 > 16 || (maxP1 > 12 && maxT > 120)) {
-    selectedClass = 'CL300_PN40';
-  }
+  // Pressure Class Selection logic using ASME B16.34 material-specific P-T rating curves
+  const bodyMat: BodyMaterialGroupId = params.bodyMaterial ?? 'WCB_1_1';
+  const b1634Check = evaluateAsmeB1634Rating('CL150_PN16', bodyMat, maxP1, maxT);
+  const selectedClass: PressureClassId = b1634Check.minimumCompliantClass ?? 'CL2500_PN420';
 
   // 2. Perform provisional sizing across candidate DN sizes to find required Cv
   // We test sizes in GENERIC_VALVE_SCHEDULE to calculate exact required Cv per condition
