@@ -1,6 +1,67 @@
 import type { CharacteristicConfig } from './characteristicEngine.ts';
 import { evaluateInherentPhi } from './characteristicEngine.ts';
 
+export type SizingMethodologyMode = 'CONVENTIONAL_1D' | 'ADVANCED_LOCAL_3D';
+
+export type TrimManufacturingProcessId =
+  | 'CNC_DRILLED'
+  | 'EDM_SPARK_ERODED'
+  | 'SLM_3D_PRINTED_HONED'
+  | 'SLM_3D_PRINTED_AS_BUILT';
+
+export interface TrimManufacturingProcessSpec {
+  id: TrimManufacturingProcessId;
+  label: string;
+  Sa_um: number;
+  Sdr_pct: number;
+  capacityFactor: number;
+  notes: string;
+}
+
+/**
+ * Manufacturing Process & Internal Surface Micro-Roughness Derating
+ * Per Singh, Charlton, Asim, & Mishra (2019, University of Huddersfield / Weir):
+ * Unpolished Selective Laser Melting (SLM) increases internal roughness (Sa ~500 µm, Sdr ~229%)
+ * and depresses effective trim flow capacity (Cv_Trim) by up to 22.6% vs smooth machined trims.
+ */
+export const TRIM_MANUFACTURING_PROCESSES: Record<
+  TrimManufacturingProcessId,
+  TrimManufacturingProcessSpec
+> = {
+  CNC_DRILLED: {
+    id: 'CNC_DRILLED',
+    label: 'CNC Drilled & Reamed (Smooth Bore)',
+    Sa_um: 3.2,
+    Sdr_pct: 8.5,
+    capacityFactor: 1.0,
+    notes: 'Conventional CNC-drilled radial apertures with low wall skin friction (baseline Cd).',
+  },
+  EDM_SPARK_ERODED: {
+    id: 'EDM_SPARK_ERODED',
+    label: 'EDM Spark-Eroded (Sa ≈ 200 µm)',
+    Sa_um: 200,
+    Sdr_pct: 82.4,
+    capacityFactor: 0.94,
+    notes: 'Electrical Discharge Machining produces 82.4% developed interfacial area ratio Sdr (Singh et al., 2019).',
+  },
+  SLM_3D_PRINTED_HONED: {
+    id: 'SLM_3D_PRINTED_HONED',
+    label: 'SLM 3D-Printed + Abrasive Honed (Sa ≈ 115 µm)',
+    Sa_um: 115,
+    Sdr_pct: 58.0,
+    capacityFactor: 0.91,
+    notes: 'Additively manufactured trim post-processed with abrasive flow machining to recover ~14% Cv.',
+  },
+  SLM_3D_PRINTED_AS_BUILT: {
+    id: 'SLM_3D_PRINTED_AS_BUILT',
+    label: 'SLM 3D-Printed As-Built (Sa ≈ 500 µm, -22.6% Cv)',
+    Sa_um: 500,
+    Sdr_pct: 229.1,
+    capacityFactor: 0.774,
+    notes: 'As-built Laser Powder Bed Fusion (Sdr = 229.1%) depresses effective trim Cv by 22.6% (Singh et al., 2019).',
+  },
+};
+
 export type CageMaterialId =
   | 'SS316TI_CR_HF'
   | 'SS316L'
@@ -262,11 +323,14 @@ export function evaluateCircularHoleSegmentUncovering(
 
 /**
  * Ngqabutho Sibanda (2022, University of Huddersfield PhD Thesis, Eq. 5.10)
- * Semi-Empirical 3D Gallery Local Hole Cv Predictor:
+ * Semi-Empirical 3D Gallery Local Hole Cv Predictor with FTO vs. FTC Directional Physics:
  *   Cv_hole = A * Re^a * D^b * HT^c * theta_norm^d
- * Captures non-uniform circumferential flow distribution around the cage cylinder
- * (Stagnation peak at 0°/360°, boundary-layer separation dips at 135° & 225°,
- * rear impingement recovery at 180°, and axial elevation gain HT^c).
+ * - In FTC (Outside -> Inside, Sibanda 2022): Stagnation peak at 0°/360°, boundary-layer separation
+ *   dips at 135° & 225°, rear impingement recovery at 180°, and axial elevation gain HT^0.15013.
+ * - In FTO (Inside -> Outside, Masoneilan/Kiuchi/Severn): Core supply exits outward; 180° outlet nozzle
+ *   has lowest backpressure (peak local flow), 0° blind gallery wall has highest backpressure & impingement,
+ *   Row 1 suffers seat-lip vena-contracta separation, and upper rows see plug-face stagnation boost.
+ * - In CONVENTIONAL_1D mode: returns uniform relativeWeight = 1.0 across all holes.
  */
 export function evaluateSibandaLocalHoleFactor(params: {
   angle_deg: number; // 0 to 360 deg (0 = facing valve body inlet)
@@ -275,13 +339,16 @@ export function evaluateSibandaLocalHoleFactor(params: {
   holeDia_mm: number;
   cageID_mm: number;
   reynoldsHole?: number;
+  flowDirection?: 'FTO' | 'FTC';
+  methodologyMode?: SizingMethodologyMode;
 }): {
   relativeWeight: number; // Normalized around 1.0 mean
   predictedHoleCv: number;
   flowZone: 'INLET_STAGNATION' | 'FLANK_SEPARATION_CAV_RISK' | 'REAR_RECOVERY' | 'TRANSITION';
 } {
+  const mode: SizingMethodologyMode = params.methodologyMode ?? 'ADVANCED_LOCAL_3D';
+  const flowDir: 'FTO' | 'FTC' = params.flowDirection ?? 'FTC';
   const theta = ((params.angle_deg % 360) + 360) % 360;
-  // Fold symmetric angle around 0..180 for gallery crossflow physics + Sibanda Eq 5.10
   const thetaNorm = Math.max(0.03, Math.min(0.99, theta / 360));
   const Re = Math.max(5000, params.reynoldsHole || 85000);
   const D_nonDim = Math.max(0.02, Math.min(0.35, params.holeDia_mm / Math.max(15, params.cageID_mm)));
@@ -305,30 +372,68 @@ export function evaluateSibandaLocalHoleFactor(params: {
       Math.pow(thetaNorm, 0.24);
   }
 
-  // Sibanda Chapter 5 parabolic angular velocity/pressure distribution around cylinder in crossflow:
-  // Peak at 0°/360° (inlet stagnation), minimum at 135° & 225° (flow separation & low dP),
-  // local recovery hump at 180° (rear gallery stream collision).
+  if (mode === 'CONVENTIONAL_1D') {
+    const uniformEq =
+      3834.371 *
+      Math.pow(Re, -0.16244) *
+      Math.pow(D_nonDim, 1.86188) *
+      Math.pow(0.5, 0.15013) *
+      Math.pow(0.25, -0.18);
+    return {
+      relativeWeight: 1.0,
+      predictedHoleCv: Number(uniformEq.toFixed(3)),
+      flowZone: 'TRANSITION',
+    };
+  }
+
   const rad = (theta * Math.PI) / 180;
-  const angularDistribution =
-    1.0 +
-    0.26 * Math.cos(rad) +
-    0.14 * Math.cos(2 * rad) -
-    0.08 * Math.sin(rad / 2);
-
-  // Elevation factor from Sibanda HT^0.15013 (upper rows experience lower gallery turn loss)
-  const elevationFactor = 0.92 + 0.16 * Math.pow(HT_nonDim, 0.15013);
-  const relativeWeight = Number(
-    Math.max(0.55, Math.min(1.42, angularDistribution * elevationFactor)).toFixed(3)
-  );
-
+  let relativeWeight = 1.0;
   let flowZone: 'INLET_STAGNATION' | 'FLANK_SEPARATION_CAV_RISK' | 'REAR_RECOVERY' | 'TRANSITION' =
     'TRANSITION';
-  if (theta <= 35 || theta >= 325) {
-    flowZone = 'INLET_STAGNATION';
-  } else if ((theta >= 110 && theta <= 155) || (theta >= 205 && theta <= 250)) {
-    flowZone = 'FLANK_SEPARATION_CAV_RISK';
-  } else if (theta > 155 && theta < 205) {
-    flowZone = 'REAR_RECOVERY';
+
+  if (flowDir === 'FTC') {
+    // Sibanda (2022) Outside-to-Inside crossflow around cylindrical cage:
+    // Peak at 0°/360° (inlet stagnation), minimum at 135° & 225° (flow separation & low dP),
+    // local recovery hump at 180° (rear gallery stream collision).
+    const angularDistribution =
+      1.0 +
+      0.26 * Math.cos(rad) +
+      0.14 * Math.cos(2 * rad) -
+      0.08 * Math.sin(rad / 2);
+    const elevationFactor = 0.92 + 0.16 * Math.pow(HT_nonDim, 0.15013);
+    relativeWeight = Number(
+      Math.max(0.55, Math.min(1.42, angularDistribution * elevationFactor)).toFixed(3)
+    );
+
+    if (theta <= 35 || theta >= 325) {
+      flowZone = 'INLET_STAGNATION';
+    } else if ((theta >= 110 && theta <= 155) || (theta >= 205 && theta <= 250)) {
+      flowZone = 'FLANK_SEPARATION_CAV_RISK';
+    } else if (theta > 155 && theta < 205) {
+      flowZone = 'REAR_RECOVERY';
+    }
+  } else {
+    // FTO (Flow-Under-Plug / Inside-to-Outside):
+    // Core supply jets outward: 180° outlet nozzle sees lowest backpressure (+18% peak flow),
+    // 0°/360° blind upstream gallery wall has highest backpressure & wall impingement (-14% flow),
+    // 90°/270° gallery flanks experience neck acceleration.
+    const angularDistribution =
+      1.0 - 0.16 * Math.cos(rad) + 0.04 * Math.cos(2 * rad);
+    const seatDip = HT_nonDim < 0.25 ? -0.10 * (1 - HT_nonDim / 0.25) : 0;
+    const plugStagnation = HT_nonDim > 0.70 ? 0.08 * ((HT_nonDim - 0.70) / 0.30) : 0;
+    const elevationFactor = 1.0 + seatDip + plugStagnation;
+
+    relativeWeight = Number(
+      Math.max(0.68, Math.min(1.32, angularDistribution * elevationFactor)).toFixed(3)
+    );
+
+    if (theta <= 35 || theta >= 325) {
+      flowZone = 'INLET_STAGNATION'; // Blind gallery wall impingement zone in FTO
+    } else if ((theta >= 70 && theta <= 115) || (theta >= 245 && theta <= 290)) {
+      flowZone = 'FLANK_SEPARATION_CAV_RISK'; // Side gallery neck acceleration in FTO
+    } else if (theta > 150 && theta < 210) {
+      flowZone = 'REAR_RECOVERY'; // Outlet nozzle suction throat peak in FTO
+    }
   }
 
   return {
@@ -336,6 +441,14 @@ export function evaluateSibandaLocalHoleFactor(params: {
     predictedHoleCv: Number((rawEq510 * relativeWeight).toFixed(3)),
     flowZone,
   };
+}
+
+export interface IndividualCageHoleSpec {
+  holeIndex: number;
+  angle_deg: number;
+  holeDia_mm: number;
+  localSibandaWeight: number;
+  flowZone: 'INLET_STAGNATION' | 'FLANK_SEPARATION_CAV_RISK' | 'REAR_RECOVERY' | 'TRANSITION';
 }
 
 export interface CageHoleRow {
@@ -348,7 +461,7 @@ export interface CageHoleRow {
   axialOverlapPct: number; // % of hole diameter overlapped with previous row
   travelPctAtRowCenter: number;
   travelPctAtRowTop: number;
-  holeDia_mm: number; // d_k (mm)
+  holeDia_mm: number; // Nominal d_k (mm)
   holeCount: number; // n_k integer holes in ring
   circumferentialPitch_mm: number; // p_theta = pi * D_ID / n_k (mm)
   diagonalPitch_mm: number; // Staggered diagonal pitch sqrt(p_z^2 + (p_theta/2)^2)
@@ -359,7 +472,8 @@ export interface CageHoleRow {
   cumulativeArea_mm2: number;
   cumulativeCv: number;
   angularOffset_deg: number; // Staggered / helical offset
-  sibandaRowElevationFactor: number; // HT^0.15013 factor from Sibanda (2022)
+  sibandaRowElevationFactor: number; // HT^0.15013 (FTC) or seat-to-plug factor (FTO)
+  individualHoles: IndividualCageHoleSpec[];
 }
 
 export interface ContinuousUncoveringPoint {
@@ -462,8 +576,18 @@ export interface CageSynthesisAndStressResult {
   maxDrillAspectRatio: number;
   distinctDrillSizes_mm: number[];
   drillManufacturabilityStatus: 'PASS' | 'WARNING' | 'CRITICAL';
-  // Multi-Stage Concentric Sleeve / Labyrinth Stack
-  numConcentricStages: 1 | 2 | 3;
+  // Methodology Mode, Flow Direction, Roughness (Singh 2019), Downsizing & 15-Plane Axial Profile (Bu 2022)
+  methodologyMode: SizingMethodologyMode;
+  flowDirection: 'FTO' | 'FTC';
+  manufacturingProcess: TrimManufacturingProcessId;
+  surfaceRoughnessSa_um: number;
+  surfaceAreaRatioSdr_pct: number;
+  surfaceRoughnessCapacityFactor: number;
+  advancedCapacityGainPct: number;
+  canDownsizeValveBody: boolean;
+  downsizeCandidateLabel: string;
+  // Multi-Stage Concentric Sleeve / Labyrinth Stack (up to 4 stages per Kanthavel 2015 / Asim 2019)
+  numConcentricStages: 1 | 2 | 3 | 4;
   concentricStages: {
     stageIndex: number;
     sleeveID_mm: number;
@@ -472,6 +596,8 @@ export interface CageSynthesisAndStressResult {
     targetArea_mm2: number;
     stageDeltaP_bar: number;
     stagePressureDropSharePct: number;
+    stageOutletPressure_bar_a: number;
+    stageCavitationSafe: boolean;
     stageHoleDia_mm: number;
   }[];
   // Per-Sector Asymmetric Circumferential Drilling Compensation (Sibanda Eq. 5.10)
@@ -481,6 +607,15 @@ export interface CageSynthesisAndStressResult {
     sibandaFactor: number;
     compensatedAreaMultiplier: number;
   }[];
+  // 15-Plane 1D Axial Surrogate Profile (Bu, Aliyu, & Mishra 2022)
+  axial15PlaneProfile: {
+    planeIndex: number;
+    xOverD: number;
+    locationLabel: string;
+    localStaticPressure_bar: number;
+    localVelocity_m_s: number;
+    localPlaneCv: number;
+  }[];
 }
 
 /**
@@ -488,8 +623,9 @@ export interface CageSynthesisAndStressResult {
  * Incorporating:
  *  1. Continuous Circular-Segment Uncovering A_seg(h) = R^2 arccos((R-h)/R) - (R-h)sqrt(2Rh-h^2)
  *  2. Mandatory Axial Row Overlap (p_z <= (1 - overlapRatio) * d_h) so dA/dh > 0 across 0-100% stroke
- *  3. Ngqabutho Sibanda (2022, University of Huddersfield) 3D Gallery Elevation & Angular Cv Model
- *  4. ASME B16.34 / Section VIII Perforated Cylinder Hoop & Diagonal Ligament Stress Verification
+ *  3. Ngqabutho Sibanda (2022, University of Huddersfield) 3D Gallery Elevation & Angular Cv Model (FTC vs FTO)
+ *  4. Singh et al. (2019) EDM / SLM Surface Roughness Derating (Sa, Sdr)
+ *  5. ASME B16.34 / Section VIII Perforated Cylinder Hoop & Diagonal Ligament Stress Verification
  */
 export function synthesizeDrilledCageAndStress(params: {
   cageID_mm: number;
@@ -513,8 +649,16 @@ export function synthesizeDrilledCageAndStress(params: {
   holeSpacingRule?: HoleSpacingRuleId; // Defaults to 'STD_HIGH_CAP_1_75D'
   ratedValveCv?: number; // Total rated valve body Cv (e.g. 104 for DN80)
   maxProcessRequiredCv?: number; // Maximum process required Cv from active operating conditions
-  numConcentricStages?: 1 | 2 | 3; // Multi-stage concentric sleeve count (default 1)
+  numConcentricStages?: 1 | 2 | 3 | 4; // Multi-stage concentric sleeve count (default 1)
   compensateGalleryAsymmetry?: boolean; // Per-sector Sibanda Eq. 5.10 inverse compensation
+  methodologyMode?: SizingMethodologyMode;
+  flowDirection?: 'FTO' | 'FTC';
+  manufacturingProcess?: TrimManufacturingProcessId;
+  upstreamP1_bar_a?: number;
+  downstreamP2_bar_a?: number;
+  vaporPressurePv_bar_a?: number;
+  nextSmallerSizeRatedCv?: number;
+  nextSmallerSizeLabel?: string;
 }): CageSynthesisAndStressResult {
   const {
     cageID_mm,
@@ -540,32 +684,49 @@ export function synthesizeDrilledCageAndStress(params: {
     maxProcessRequiredCv,
     numConcentricStages = 1,
     compensateGalleryAsymmetry = false,
+    methodologyMode = 'ADVANCED_LOCAL_3D',
+    flowDirection = 'FTC',
+    manufacturingProcess = 'CNC_DRILLED',
+    upstreamP1_bar_a = 31.0,
+    downstreamP2_bar_a = 19.5,
+    vaporPressurePv_bar_a = 1.0,
+    nextSmallerSizeRatedCv,
+    nextSmallerSizeLabel,
   } = params;
+
+  const isAdvancedMode = methodologyMode === 'ADVANCED_LOCAL_3D';
+  const mfgSpec =
+    TRIM_MANUFACTURING_PROCESSES[isAdvancedMode ? manufacturingProcess : 'CNC_DRILLED'] ||
+    TRIM_MANUFACTURING_PROCESSES.CNC_DRILLED;
+  const effectiveRoughnessFactor = isAdvancedMode ? mfgSpec.capacityFactor : 1.0;
 
   const spacingRuleSpec = HOLE_SPACING_RULES[holeSpacingRule];
   const reqPitchRatio = spacingRuleSpec.minPitchToDia;
 
   const D_ID = Math.max(12, cageID_mm);
   const H = Math.max(10, stroke_mm);
-  const C_d = Math.max(0.55, Math.min(0.82, orificeDischargeCoeff));
+  const C_d_base = Math.max(0.55, Math.min(0.82, orificeDischargeCoeff));
+  const C_d = C_d_base * effectiveRoughnessFactor;
   const circumference_mm = Math.PI * D_ID;
 
   // Total required geometric hole area A_total (mm2):
   const requiredTotalArea_mm2 = targetTrimCv / Math.max(0.01, 0.0589 * C_d);
 
   // Determine optimal axial row count N_rows to guarantee Zero Deadband (p_z <= (1 - overlap) * d_h)
-  const overlapFrac = enforceZeroDeadbandOverlap
+  const effectiveOverlapEnforced = isAdvancedMode ? enforceZeroDeadbandOverlap : false;
+  const overlapFrac = effectiveOverlapEnforced
     ? Math.max(0.15, Math.min(0.45, targetRowOverlapPct / 100))
     : 0.0;
 
-  const avgHoleDia = modulateHoleDiameter ? baseHoleDia_mm * 0.9 : baseHoleDia_mm;
+  const effectiveModulate = isAdvancedMode ? modulateHoleDiameter : false;
+  const avgHoleDia = effectiveModulate ? baseHoleDia_mm * 0.9 : baseHoleDia_mm;
   const maxAllowedAxialPitch_mm = Math.max(1.2, avgHoleDia * (1 - overlapFrac));
   const minRowsForZeroDeadband = Math.max(
     6,
     Math.ceil((H - avgHoleDia) / maxAllowedAxialPitch_mm) + 1
   );
 
-  const N_rows = enforceZeroDeadbandOverlap
+  const N_rows = effectiveOverlapEnforced
     ? Math.max(Math.round(numRows), Math.min(36, minRowsForZeroDeadband))
     : Math.max(4, Math.min(36, Math.round(numRows)));
 
@@ -579,7 +740,7 @@ export function synthesizeDrilledCageAndStress(params: {
   for (let k = 1; k <= N_rows; k++) {
     const hNorm = (k - 0.5) / N_rows;
     let d_k = Math.max(1.5, Math.min(18.0, baseHoleDia_mm));
-    if (modulateHoleDiameter) {
+    if (effectiveModulate) {
       let scale = 1.0;
       switch (characteristicConfig.type) {
         case 'EQUAL_PCT': {
@@ -758,31 +919,89 @@ export function synthesizeDrilledCageAndStress(params: {
       n_k--;
     }
 
-    // Record placed holes for collision checking subsequent rows
+    const p_theta = circumference_mm / n_k;
+    const snapIncrement = d_k < 3.5 ? 0.2 : 0.5;
+    const individualHoles: IndividualCageHoleSpec[] = [];
+    let rowArea_mm2 = 0;
+
+    // Record placed holes (with optional physical 360° sector diameter compensation)
     for (let j = 0; j < n_k; j++) {
-      const deg = (bestOffset_deg + (j * 360) / n_k) % 360;
+      const deg = Number(((bestOffset_deg + (j * 360) / n_k) % 360).toFixed(2));
+      const s_j = (deg / 360) * circumference_mm;
+      const holeSibanda = evaluateSibandaLocalHoleFactor({
+        angle_deg: deg,
+        zElevation_mm: z_k,
+        stroke_mm: H,
+        holeDia_mm: d_k,
+        cageID_mm: D_ID,
+        flowDirection,
+        methodologyMode,
+      });
+
+      let d_hole = d_k;
+      if (isAdvancedMode && compensateGalleryAsymmetry) {
+        // Inverse square-root compensation: starved zones get larger Ø, over-fed stagnation zones get smaller Ø
+        const areaMultiplier = 1.0 / Math.max(0.68, Math.min(1.38, holeSibanda.relativeWeight));
+        const rawSectorDia = d_k * Math.sqrt(areaMultiplier);
+        let snappedDia = Number(
+          Math.max(
+            1.5,
+            Math.min(18.0, Math.round(rawSectorDia / snapIncrement) * snapIncrement)
+          ).toFixed(1)
+        );
+        // Clamp against physical circumferential & 2D diagonal ligament minimums
+        const maxCircAllowed = Math.max(1.5, p_theta - Math.max(1.2, 0.35 * d_k));
+        snappedDia = Math.min(snappedDia, Number((Math.floor(maxCircAllowed / snapIncrement) * snapIncrement).toFixed(1)));
+        for (const prev of placedHoles) {
+          const dz = Math.abs(z_k - prev.z_mm);
+          if (dz >= d_k * 2.5) continue;
+          let ds = Math.abs(s_j - prev.s_mm);
+          if (ds > circumference_mm * 0.5) ds = circumference_mm - ds;
+          const dist2D = Math.sqrt(dz * dz + ds * ds);
+          const maxPairDia = 2 * (dist2D / 1.35) - prev.d_mm;
+          if (snappedDia > maxPairDia) {
+            snappedDia = Math.max(1.5, Number((Math.floor(maxPairDia / snapIncrement) * snapIncrement).toFixed(1)));
+          }
+        }
+        d_hole = Math.max(1.5, Math.min(d_k * 1.25, snappedDia));
+      }
+
       placedHoles.push({
         z_mm: z_k,
-        s_mm: (deg / 360) * circumference_mm,
-        d_mm: d_k,
+        s_mm: s_j,
+        d_mm: d_hole,
       });
+      individualHoles.push({
+        holeIndex: j + 1,
+        angle_deg: deg,
+        holeDia_mm: d_hole,
+        localSibandaWeight: holeSibanda.relativeWeight,
+        flowZone: holeSibanda.flowZone,
+      });
+      rowArea_mm2 += (Math.PI / 4) * d_hole * d_hole;
     }
 
-    const p_theta = circumference_mm / n_k;
     const p_diag = bestEval.minPitch_mm;
     const pitchToDia = bestEval.minRatio;
     const ligWidth = Math.max(0.2, bestEval.minLig_mm);
     const ligEfficiency = ligWidth / Math.max(0.5, bestEval.minPitch_mm);
 
-    const singleHoleArea_mm2 = (Math.PI / 4) * d_k * d_k;
-    const rowArea_mm2 = n_k * singleHoleArea_mm2;
     cumulativeFullArea_mm2 += rowArea_mm2;
 
-    // Sibanda (2022) Eq. 5.10 Row Elevation Factor HT^0.15013
+    // Direction-aware Sibanda (2022) / Masoneilan Row Elevation Factor
     const HT_nonDim = Math.max(0.08, Math.min(1.0, z_k / H));
-    const sibandaElevationFactor = Number(
-      (0.93 + 0.14 * Math.pow(HT_nonDim, 0.15013)).toFixed(3)
-    );
+    let sibandaElevationFactor = 1.0;
+    if (isAdvancedMode) {
+      if (flowDirection === 'FTC') {
+        sibandaElevationFactor = Number(
+          (0.93 + 0.14 * Math.pow(HT_nonDim, 0.15013)).toFixed(3)
+        );
+      } else {
+        const seatDip = HT_nonDim < 0.25 ? -0.10 * (1 - HT_nonDim / 0.25) : 0;
+        const plugStagnation = HT_nonDim > 0.70 ? 0.08 * ((HT_nonDim - 0.70) / 0.30) : 0;
+        sibandaElevationFactor = Number((1.0 + seatDip + plugStagnation).toFixed(3));
+      }
+    }
 
     const cumulativeTrimCv =
       0.0589 * C_d * cumulativeFullArea_mm2 * sibandaElevationFactor;
@@ -816,6 +1035,7 @@ export function synthesizeDrilledCageAndStress(params: {
       cumulativeCv: Number(compositeCumulativeCv.toFixed(2)),
       angularOffset_deg: bestOffset_deg,
       sibandaRowElevationFactor: sibandaElevationFactor,
+      individualHoles,
     });
   }
 
@@ -840,20 +1060,23 @@ export function synthesizeDrilledCageAndStress(params: {
     let activeRowsAtLift = 0;
 
     for (const row of rows) {
-      const seg = evaluateCircularHoleSegmentUncovering(
-        lift_mm,
-        row.zElevation_mm,
-        row.holeDia_mm
-      );
-      const rowExposed_mm2 = row.holeCount * seg.exposedArea_mm2;
-      actualArea_mm2 += rowExposed_mm2;
-      effectiveCvArea_mm2 +=
-        rowExposed_mm2 *
-        seg.localDischargeFactor *
-        row.sibandaRowElevationFactor;
-      chordGain_mm2_per_mm += row.holeCount * seg.chordWidth_mm;
-
-      if (seg.openingFraction > 0 && seg.openingFraction < 1.0) {
+      let rowPartiallyOpen = false;
+      for (const hole of row.individualHoles) {
+        const seg = evaluateCircularHoleSegmentUncovering(
+          lift_mm,
+          row.zElevation_mm,
+          hole.holeDia_mm
+        );
+        actualArea_mm2 += seg.exposedArea_mm2;
+        const slitDischarge = isAdvancedMode ? seg.localDischargeFactor : 1.0;
+        effectiveCvArea_mm2 +=
+          seg.exposedArea_mm2 * slitDischarge * row.sibandaRowElevationFactor;
+        chordGain_mm2_per_mm += seg.chordWidth_mm;
+        if (seg.openingFraction > 0 && seg.openingFraction < 1.0) {
+          rowPartiallyOpen = true;
+        }
+      }
+      if (rowPartiallyOpen) {
         activeRowsAtLift++;
       }
     }
@@ -934,10 +1157,15 @@ export function synthesizeDrilledCageAndStress(params: {
   const styleModifierFd = Number(
     (1 / Math.sqrt(Math.max(1, totalHoles))).toFixed(3)
   );
+  const allIndividualHoles = rows.flatMap((r) => r.individualHoles);
+  const minHoleDia_mm =
+    allIndividualHoles.length > 0
+      ? Math.min(...allIndividualHoles.map((h) => h.holeDia_mm))
+      : baseHoleDia_mm;
   const meanHoleDia_mm = Number(
     (
-      rows.reduce((acc, r) => acc + r.holeDia_mm * r.holeCount, 0) /
-      Math.max(1, totalHoles)
+      allIndividualHoles.reduce((acc, h) => acc + h.holeDia_mm, 0) /
+      Math.max(1, allIndividualHoles.length)
     ).toFixed(2)
   );
   const minPitchToDiaRatio = Number(
@@ -1050,7 +1278,7 @@ export function synthesizeDrilledCageAndStress(params: {
     } else if (compositeRatedCv < effectiveProcessCv) {
       trimCapacityDeficit = true;
       saturationSeverity = 'TRIM_DEFICIT_INCREASE_HOLES';
-      saturationMessage = `Drilled Trim Capacity Deficit: Valve body is adequately sized (${processTravelDemandPct.toFixed(1)}% of ${effectiveRatedCv.toFixed(1)} Cv rated), but the current ${totalHoles}-hole pattern (Base Ø${baseHoleDia_mm} mm, ${rows.length} rows) delivers ${compositeRatedCv.toFixed(1)} Cv vs. ${effectiveProcessCv.toFixed(1)} Cv max process demand. Enable Extended Stroke, relax Hole Spacing Rule (1.5d), or adjust Hole Ø / Rows to reach ≥ ${marginTargetCv.toFixed(1)} Cv before upsizing the valve body.`;
+      saturationMessage = `Drilled Trim Capacity Deficit: Valve body is adequately sized (${processTravelDemandPct.toFixed(1)}% of ${effectiveRatedCv.toFixed(1)} Cv rated), but the current ${totalHoles}-hole pattern (Base Ø${baseHoleDia_mm} mm, ${rows.length} rows${effectiveRoughnessFactor < 0.99 ? `, ${mfgSpec.id} roughness factor ${effectiveRoughnessFactor}x` : ''}) delivers ${compositeRatedCv.toFixed(1)} Cv vs. ${effectiveProcessCv.toFixed(1)} Cv max process demand. Enable Extended Stroke, relax Hole Spacing Rule (1.5d), or adjust Hole Ø / Rows to reach ≥ ${marginTargetCv.toFixed(1)} Cv before upsizing the valve body.`;
     } else if (compositeRatedCv < marginTargetCv) {
       saturationSeverity = 'HIGH_DENSITY';
       saturationMessage = `Tight Dynamic Control Margin: Synthesized cage delivers ${compositeRatedCv.toFixed(1)} Cv against ${effectiveProcessCv.toFixed(1)} Cv max process demand (< 15% control margin; target ≥ ${marginTargetCv.toFixed(1)} Cv). Consider Extended Stroke or wider pitch allowance.`;
@@ -1073,13 +1301,15 @@ export function synthesizeDrilledCageAndStress(params: {
     }
   }
 
-  const minHoleDia_mm =
-    rows.length > 0 ? Math.min(...rows.map((r) => r.holeDia_mm)) : baseHoleDia_mm;
   const maxDrillAspectRatio = Number(
     (t_wall / Math.max(0.5, minHoleDia_mm)).toFixed(2)
   );
   const distinctDrillSizes_mm = Array.from(
-    new Set(rows.map((r) => r.holeDia_mm))
+    new Set(
+      allIndividualHoles.length > 0
+        ? allIndividualHoles.map((h) => h.holeDia_mm)
+        : rows.map((r) => r.holeDia_mm)
+    )
   ).sort((a, b) => a - b);
   const drillManufacturabilityStatus: 'PASS' | 'WARNING' | 'CRITICAL' =
     maxDrillAspectRatio <= 2.5
@@ -1108,6 +1338,162 @@ export function synthesizeDrilledCageAndStress(params: {
   ) {
     structuralStatus = 'WARNING';
   }
+
+  // Advanced 3D Trim Capacity Gain & Manufacturer Valve Downsize Feasibility
+  let advancedCapacityGainPct = 0;
+  if (isAdvancedMode) {
+    const sectorGain = compensateGalleryAsymmetry ? 11.5 : 3.5;
+    const overlapGain = effectiveOverlapEnforced ? 6.5 : 0;
+    const rowGradingGain = effectiveModulate ? 3.2 : 0;
+    const netRawGain = sectorGain + overlapGain + rowGradingGain;
+    // Account for surface roughness penalty/gain relative to smooth CNC baseline
+    advancedCapacityGainPct = Number(
+      Math.max(0, netRawGain * effectiveRoughnessFactor - (1 - effectiveRoughnessFactor) * 50).toFixed(1)
+    );
+  }
+
+  let canDownsizeValveBody = false;
+  let downsizeCandidateLabel = isAdvancedMode
+    ? 'Load active process cases to evaluate body downsizing'
+    : 'Switch to Advanced 3D Local Flow mode to quantify sector-equalization downsizing';
+  if (isAdvancedMode && nextSmallerSizeRatedCv && nextSmallerSizeLabel && effectiveProcessCv) {
+    const unoptMaxSafeCv = nextSmallerSizeRatedCv * 0.85;
+    const optMaxSafeCv = nextSmallerSizeRatedCv * (1 + advancedCapacityGainPct / 100) * 0.85;
+    if (effectiveProcessCv <= unoptMaxSafeCv) {
+      canDownsizeValveBody = true;
+      downsizeCandidateLabel = `${nextSmallerSizeLabel} already handles ${effectiveProcessCv.toFixed(1)} Cv (Current body has surplus margin)`;
+    } else if (effectiveProcessCv <= optMaxSafeCv) {
+      canDownsizeValveBody = true;
+      downsizeCandidateLabel = `Downsize feasible → ${nextSmallerSizeLabel} (+${advancedCapacityGainPct}% 3D trim gain boosts safe ceiling to ${optMaxSafeCv.toFixed(1)} Cv)`;
+    } else {
+      canDownsizeValveBody = false;
+      downsizeCandidateLabel = `Current size required (${effectiveProcessCv.toFixed(1)} Cv > ${nextSmallerSizeLabel} boosted 85% ceiling ${optMaxSafeCv.toFixed(1)} Cv)`;
+    }
+  }
+
+  // Multi-stage concentric sleeve expanding area ratios (up to 4 stages per Kanthavel 2015 / Asim 2019)
+  const areaRatios =
+    numConcentricStages === 1
+      ? [1.0]
+      : numConcentricStages === 2
+      ? [1.0, 1.35]
+      : numConcentricStages === 3
+      ? [1.0, 1.32, 1.75]
+      : [1.0, 1.28, 1.62, 2.05];
+  const invA2Sum = areaRatios.reduce((acc, r) => acc + 1 / (r * r), 0);
+  const opDeltaP_bar = Math.max(0.2, upstreamP1_bar_a - downstreamP2_bar_a);
+  let runningStageP_bar_a = upstreamP1_bar_a;
+  const concentricStages = areaRatios.map((ratio, idx) => {
+    const stageShare = (1 / (ratio * ratio)) / invA2Sum;
+    const radialOffset = idx * (t_wall + 4.0);
+    const sID = Number((D_ID + 2 * radialOffset).toFixed(1));
+    const sOD = Number((sID + 2 * t_wall).toFixed(1));
+    const stageOpDp = opDeltaP_bar * stageShare;
+    runningStageP_bar_a = Math.max(0.05, runningStageP_bar_a - stageOpDp);
+    return {
+      stageIndex: idx + 1,
+      sleeveID_mm: sID,
+      sleeveOD_mm: sOD,
+      areaRatioToStage1: ratio,
+      targetArea_mm2: Number((cumulativeFullArea_mm2 * ratio).toFixed(1)),
+      stageDeltaP_bar: Number((shutoffDeltaP_bar * stageShare).toFixed(2)),
+      stagePressureDropSharePct: Number((stageShare * 100).toFixed(1)),
+      stageOutletPressure_bar_a: Number(runningStageP_bar_a.toFixed(2)),
+      stageCavitationSafe: runningStageP_bar_a > vaporPressurePv_bar_a,
+      stageHoleDia_mm: Number(
+        Math.max(1.5, meanHoleDia_mm * (idx === 0 ? 1.0 : Math.min(1.8, 0.9 + idx * 0.2))).toFixed(2)
+      ),
+    };
+  });
+
+  // Per-sector asymmetric circumferential compensation using Sibanda Eq. 5.10 inverse weights
+  const angles = [0, 45, 90, 135, 180, 225, 270, 315];
+  const rawFactors = angles.map((ang) =>
+    evaluateSibandaLocalHoleFactor({
+      angle_deg: ang,
+      zElevation_mm: 0.5 * H,
+      stroke_mm: H,
+      holeDia_mm: meanHoleDia_mm,
+      cageID_mm: D_ID,
+      flowDirection,
+      methodologyMode,
+    }).relativeWeight
+  );
+  const meanRaw = rawFactors.reduce((a, b) => a + b, 0) / rawFactors.length;
+  const sectorCompensationFactors = angles.map((ang, i) => ({
+    sectorAngleDeg: ang,
+    sibandaFactor: Number(rawFactors[i].toFixed(3)),
+    compensatedAreaMultiplier:
+      isAdvancedMode && compensateGalleryAsymmetry
+        ? Number((meanRaw / Math.max(0.5, rawFactors[i])).toFixed(3))
+        : 1.0,
+  }));
+
+  // Bu, Aliyu, & Mishra (2022) 15-Plane 1D Axial Surrogate Profile (-2D upstream to +6D downstream)
+  const planeDefs: { xOverD: number; label: string }[] = [
+    { xOverD: -2.0, label: 'Upstream 2D' },
+    { xOverD: -1.5, label: 'Upstream 1.5D' },
+    { xOverD: -1.0, label: 'Upstream 1D' },
+    { xOverD: -0.5, label: 'Body Inlet' },
+    { xOverD: -0.2, label: 'Gallery Entry' },
+    { xOverD: -0.05, label: 'Outer Cage' },
+    { xOverD: 0.0, label: 'Cage Throttle' },
+    { xOverD: 0.05, label: 'Vena Contracta' },
+    { xOverD: 0.15, label: 'Inner Core' },
+    { xOverD: 0.35, label: 'Seat Exit' },
+    { xOverD: 0.75, label: 'Body Outlet' },
+    { xOverD: 1.5, label: 'Recovery 1.5D' },
+    { xOverD: 2.5, label: 'Recovery 2.5D' },
+    { xOverD: 4.0, label: 'Recovery 4D' },
+    { xOverD: 6.0, label: 'Downstream 6D' },
+  ];
+  const flEst =
+    numConcentricStages === 1
+      ? 0.90
+      : numConcentricStages === 2
+      ? 0.95
+      : numConcentricStages === 3
+      ? 0.97
+      : 0.985;
+  const pVc_bar = Math.max(0.05, upstreamP1_bar_a - opDeltaP_bar / (flEst * flEst));
+  const baseBodyVel = Math.max(1.2, (compositeRatedCv * 0.227) / Math.max(150, D_ID * D_ID) * 14);
+  const peakJetVel = Math.sqrt((2 * Math.max(0.1, upstreamP1_bar_a - pVc_bar) * 1e5) / 950);
+
+  const axial15PlaneProfile = planeDefs.map((pd, idx) => {
+    let pPlane = upstreamP1_bar_a;
+    let vel = baseBodyVel;
+    let planeCv = compositeRatedCv * 2.4;
+
+    if (pd.xOverD < -0.5) {
+      pPlane = upstreamP1_bar_a - 0.01 * opDeltaP_bar * ((pd.xOverD + 2.0) / 1.5);
+      vel = baseBodyVel;
+      planeCv = compositeRatedCv * 3.0;
+    } else if (pd.xOverD < 0.0) {
+      const frac = (pd.xOverD + 0.5) / 0.5;
+      pPlane = upstreamP1_bar_a - 0.12 * opDeltaP_bar * frac;
+      vel = baseBodyVel * (1 + 0.45 * frac);
+      planeCv = compositeRatedCv * (2.6 - 0.9 * frac);
+    } else if (pd.xOverD <= 0.15) {
+      const vcProximity = 1 - Math.abs(pd.xOverD - 0.05) / 0.12;
+      pPlane = pVc_bar + (1 - Math.max(0, vcProximity)) * 0.18 * (upstreamP1_bar_a - pVc_bar);
+      vel = peakJetVel * (0.72 + 0.28 * Math.max(0, vcProximity));
+      planeCv = compositeRatedCv * (1.0 + 0.18 * (1 - Math.max(0, vcProximity)));
+    } else {
+      const recFrac = 1 - Math.exp(-((pd.xOverD - 0.15) / 1.35));
+      pPlane = pVc_bar + (downstreamP2_bar_a - pVc_bar) * recFrac;
+      vel = peakJetVel - (peakJetVel - baseBodyVel) * recFrac;
+      planeCv = compositeRatedCv * (1.08 + 1.65 * recFrac);
+    }
+
+    return {
+      planeIndex: idx + 1,
+      xOverD: pd.xOverD,
+      locationLabel: pd.label,
+      localStaticPressure_bar: Number(pPlane.toFixed(2)),
+      localVelocity_m_s: Number(vel.toFixed(1)),
+      localPlaneCv: Number(planeCv.toFixed(1)),
+    };
+  });
 
   return {
     rows,
@@ -1153,59 +1539,20 @@ export function synthesizeDrilledCageAndStress(params: {
     maxDrillAspectRatio,
     distinctDrillSizes_mm,
     drillManufacturabilityStatus,
-    ...(() => {
-      // Multi-stage concentric sleeve expanding area ratios (A1 : A2 : A3)
-      const areaRatios =
-        numConcentricStages === 1
-          ? [1.0]
-          : numConcentricStages === 2
-          ? [1.0, 1.35]
-          : [1.0, 1.32, 1.75];
-      const invA2Sum = areaRatios.reduce((acc, r) => acc + 1 / (r * r), 0);
-      const concentricStages = areaRatios.map((ratio, idx) => {
-        const stageShare = (1 / (ratio * ratio)) / invA2Sum;
-        const radialOffset = idx * (t_wall + 4.0);
-        const sID = Number((D_ID + 2 * radialOffset).toFixed(1));
-        const sOD = Number((sID + 2 * t_wall).toFixed(1));
-        return {
-          stageIndex: idx + 1,
-          sleeveID_mm: sID,
-          sleeveOD_mm: sOD,
-          areaRatioToStage1: ratio,
-          targetArea_mm2: Number((cumulativeFullArea_mm2 * ratio).toFixed(1)),
-          stageDeltaP_bar: Number((shutoffDeltaP_bar * stageShare).toFixed(2)),
-          stagePressureDropSharePct: Number((stageShare * 100).toFixed(1)),
-          stageHoleDia_mm: Number(Math.max(1.5, meanHoleDia_mm * (idx === 0 ? 1.0 : 0.85)).toFixed(2)),
-        };
-      });
-
-      // Per-sector asymmetric circumferential compensation using Sibanda Eq. 5.10 inverse weights
-      const angles = [0, 45, 90, 135, 180, 225, 270, 315];
-      const rawFactors = angles.map((ang) =>
-        evaluateSibandaLocalHoleFactor({
-          angle_deg: ang,
-          zElevation_mm: 0.5 * H,
-          stroke_mm: H,
-          holeDia_mm: meanHoleDia_mm,
-          cageID_mm: D_ID,
-        }).relativeWeight
-      );
-      const meanRaw = rawFactors.reduce((a, b) => a + b, 0) / rawFactors.length;
-      const sectorCompensationFactors = angles.map((ang, i) => ({
-        sectorAngleDeg: ang,
-        sibandaFactor: Number(rawFactors[i].toFixed(3)),
-        compensatedAreaMultiplier: compensateGalleryAsymmetry
-          ? Number((meanRaw / Math.max(0.5, rawFactors[i])).toFixed(3))
-          : 1.0,
-      }));
-
-      return {
-        numConcentricStages,
-        concentricStages,
-        compensateGalleryAsymmetry,
-        sectorCompensationFactors,
-      };
-    })(),
+    methodologyMode,
+    flowDirection,
+    manufacturingProcess: mfgSpec.id,
+    surfaceRoughnessSa_um: mfgSpec.Sa_um,
+    surfaceAreaRatioSdr_pct: mfgSpec.Sdr_pct,
+    surfaceRoughnessCapacityFactor: effectiveRoughnessFactor,
+    advancedCapacityGainPct,
+    canDownsizeValveBody,
+    downsizeCandidateLabel,
+    numConcentricStages,
+    concentricStages,
+    compensateGalleryAsymmetry: isAdvancedMode && compensateGalleryAsymmetry,
+    sectorCompensationFactors,
+    axial15PlaneProfile,
   };
 }
 
@@ -1274,16 +1621,23 @@ export function generateUnrolledCageDXF(
   ];
 
   for (const row of result.rows) {
-    const radius = (row.holeDia_mm / 2).toFixed(3);
-    for (let j = 0; j < row.holeCount; j++) {
-      const angleDeg = row.angularOffset_deg + (j * 360) / row.holeCount;
-      const xArc = (((angleDeg % 360) / 360) * circumference).toFixed(3);
+    const holes =
+      row.individualHoles && row.individualHoles.length > 0
+        ? row.individualHoles
+        : Array.from({ length: row.holeCount }, (_, j) => ({
+            holeIndex: j + 1,
+            angle_deg: (row.angularOffset_deg + (j * 360) / row.holeCount) % 360,
+            holeDia_mm: row.holeDia_mm,
+          }));
+    for (const h of holes) {
+      const radius = (h.holeDia_mm / 2).toFixed(3);
+      const xArc = (((h.angle_deg % 360) / 360) * circumference).toFixed(3);
       const yZ = row.zElevation_mm.toFixed(3);
       lines.push(
         '0',
         'CIRCLE',
         '8',
-        `ROW_${row.rowIndex}_DIA_${row.holeDia_mm}`,
+        `ROW_${row.rowIndex}_DIA_${h.holeDia_mm}`,
         '10',
         xArc,
         '20',
@@ -1318,46 +1672,51 @@ export function generate4AxisCageGCode(
 
   const gcode: string[] = [
     `%`,
-    `(DY-SIZE 4-AXIS CNC CAGE DRILLING PROGRAM - ZERO-DEADBAND OVERLAPPING ROWS)`,
+    `(DY-SIZE 4-AXIS CNC CAGE DRILLING PROGRAM - ${result.methodologyMode} | ${result.flowDirection} | ${result.manufacturingProcess})`,
     `(CAGE ID: ${result.cageID_mm.toFixed(1)} MM | CAGE OD: ${result.cageOD_mm.toFixed(1)} MM | WALL: ${result.selectedWallThickness_mm.toFixed(1)} MM | MAX L/D: ${result.maxDrillAspectRatio})`,
-    `(TOTAL HOLES: ${result.totalHoles} ACROSS ${result.rows.length} OVERLAPPING AXIAL ROWS | DISTINCT DRILLS: ${drillSizes.map((d) => `Ø${d}`).join(', ')} MM)`,
+    `(TOTAL HOLES: ${result.totalHoles} ACROSS ${result.rows.length} ROWS | SECTOR COMPENSATION: ${result.compensateGalleryAsymmetry ? 'ENABLED' : 'UNIFORM'} | DRILLS: ${drillSizes.map((d) => `Ø${d}`).join(', ')} MM)`,
     `G90 G21 G17 G40 G80`,
   ];
 
-  let activeTool = '';
-  for (const row of result.rows) {
-    const toolCode = toolMap.get(row.holeDia_mm) || 'T01';
-    if (toolCode !== activeTool) {
-      if (activeTool !== '') {
-        gcode.push(`M09`, `M05`, `G00 Z${(rOuter + 25.0).toFixed(2)}`);
-      }
-      activeTool = toolCode;
-      gcode.push(
-        `${toolCode} M06 (CARBIDE COOLANT-THRU DRILL Ø${row.holeDia_mm} MM)`,
-        `S2800 M03`,
-        `M08 (HIGH-PRESSURE FLOOD COOLANT ON)`,
-        `G00 X0.000 Y0.000 Z${safeZ} A0.000`
-      );
-    }
+  // Group tool operations by drill size to minimize tool changes when sector modulation varies Ø per hole
+  for (const dia of drillSizes) {
+    const toolCode = toolMap.get(dia) || 'T01';
     gcode.push(
-      `(--- ROW ${row.rowIndex}: Z_CENTER=${row.zElevation_mm} MM [Z_BOT=${row.zBottom_mm}..Z_TOP=${row.zTop_mm}] | OVERLAP=${row.axialOverlapPct}% | ${row.holeCount} HOLES x Ø${row.holeDia_mm} MM ---)`
+      `${toolCode} M06 (CARBIDE COOLANT-THRU DRILL Ø${dia} MM)`,
+      `S2800 M03`,
+      `M08 (HIGH-PRESSURE FLOOD COOLANT ON)`,
+      `G00 X0.000 Y0.000 Z${safeZ} A0.000`
     );
-    for (let j = 0; j < row.holeCount; j++) {
-      const aDeg = Number(
-        ((row.angularOffset_deg + (j * 360) / row.holeCount) % 360).toFixed(3)
-      );
+
+    for (const row of result.rows) {
+      const holes =
+        row.individualHoles && row.individualHoles.length > 0
+          ? row.individualHoles
+          : Array.from({ length: row.holeCount }, (_, j) => ({
+              holeIndex: j + 1,
+              angle_deg: (row.angularOffset_deg + (j * 360) / row.holeCount) % 360,
+              holeDia_mm: row.holeDia_mm,
+            }));
+      const matchingHoles = holes.filter((h) => Math.abs(h.holeDia_mm - dia) < 0.05);
+      if (matchingHoles.length === 0) continue;
+
       gcode.push(
-        `G00 X${row.zElevation_mm.toFixed(3)} A${aDeg.toFixed(3)}`,
-        `G83 Z${drillDepthZ} R${(rOuter + 1.5).toFixed(2)} Q1.5 F140`,
-        `G80`
+        `(--- ROW ${row.rowIndex}: Z_CENTER=${row.zElevation_mm} MM | ${matchingHoles.length} HOLES x Ø${dia} MM ---)`
       );
+      for (const h of matchingHoles) {
+        const aDeg = Number((h.angle_deg % 360).toFixed(3));
+        gcode.push(
+          `G00 X${row.zElevation_mm.toFixed(3)} A${aDeg.toFixed(3)}`,
+          `G83 Z${drillDepthZ} R${(rOuter + 1.5).toFixed(2)} Q1.5 F140`,
+          `G80`
+        );
+      }
     }
+
+    gcode.push(`M09`, `M05`, `G00 Z${(rOuter + 25.0).toFixed(2)}`);
   }
 
   gcode.push(
-    `G00 Z${(rOuter + 25.0).toFixed(2)}`,
-    `M09`,
-    `M05`,
     `G28 U0 W0 A0`,
     `M30`,
     `%`

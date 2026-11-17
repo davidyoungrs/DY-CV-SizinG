@@ -119,6 +119,14 @@ export interface CaseSizingResult {
   strokeToPortAspectRatio: number;
   lowFreqPulsationRisk: boolean;
   oshaNioshExposureSummary: string;
+  // Local 3D Gallery Flow & FTO/FTC Directional Physics (Sibanda 2022 / Singh et al. 2020)
+  localFlankSigma_min: number;
+  row1PeakVelocity_m_s: number;
+  row1ResistanceK: number;
+  localCavitationRiskWarning: boolean;
+  ftoWallImpingementWarning: boolean;
+  flowDirectionRecommendation: string;
+  multiphaseQuadrantMaldistributionPct: number;
 }
 
 export interface FluidPresetSpec {
@@ -480,6 +488,8 @@ export function evaluateOperatingCase(params: {
   equalPctRangeability: number;
   flowDirection?: FlowDirectionId;
   cageMaterialId?: string;
+  methodologyMode?: 'CONVENTIONAL_1D' | 'ADVANCED_LOCAL_3D';
+  compensateGalleryAsymmetry?: boolean;
 }): CaseSizingResult {
   const {
     point,
@@ -494,6 +504,9 @@ export function evaluateOperatingCase(params: {
     stages,
     drilledHoleDia_mm,
   } = params;
+
+  const isAdvanced3D = (params.methodologyMode ?? 'ADVANCED_LOCAL_3D') === 'ADVANCED_LOCAL_3D';
+  const isCompensated = isAdvanced3D && Boolean(params.compensateGalleryAsymmetry);
 
   const d_mm = Math.max(10, valveD_mm);
   const D1_mm = Math.max(d_mm, piping.upstreamPipeID_mm);
@@ -673,6 +686,8 @@ export function evaluateOperatingCase(params: {
   let FF = 0.96;
   let FL_required = 0;
   let sigmaCavitation = 9.99;
+  let localFlankSigma_min = 9.99;
+  let localCavitationRiskWarning = false;
   let sigmaIncipient_i = 0;
   let sigmaConstant_c = 0;
   let sigmaRecommended_mr = 0;
@@ -785,6 +800,29 @@ export function evaluateOperatingCase(params: {
       regime = 'NON_CAVITATING';
       regimeLabel = 'Non-Cavitating Liquid Service (σ > σ_i)';
       regimeSeverity = 'PASS';
+    }
+
+    // Sibanda (2022) Local 3D Gallery Flank Wake (135°/225° FTC) / Seat-Lip Throat (FTO) Cavitation Check
+    if (isAdvanced3D) {
+      const baseDepression =
+        flowDir === 'FTC'
+          ? isCompensated
+            ? 1.10
+            : 1.28
+          : isCompensated
+          ? 1.14
+          : 1.32;
+      const stageAttenuatedDepression = 1 + (baseDepression - 1) / Math.sqrt(Math.max(1, stages));
+      localFlankSigma_min = sigmaCavitation / stageAttenuatedDepression;
+      localCavitationRiskWarning =
+        sigmaCavitation >= sigmaIncipient_i && localFlankSigma_min < sigmaIncipient_i;
+      if (localCavitationRiskWarning && regime === 'NON_CAVITATING') {
+        regimeSeverity = 'WARNING';
+        regimeLabel = `${regimeLabel} (Local Row-1/Flank Cavitation Onset)`;
+      }
+    } else {
+      localFlankSigma_min = sigmaCavitation;
+      localCavitationRiskWarning = false;
     }
   } else if (point.fluidPhase === 'TWO_PHASE') {
     const Fgamma = Math.max(0.5, point.gammaCpCv / 1.40);
@@ -1068,6 +1106,53 @@ export function evaluateOperatingCase(params: {
 
   const oshaNioshExposureSummary = getOshaNioshExposureSummary(noiseDrilledCage_dBA);
 
+  // Sibanda (2022) Row-1 Peak Jet Velocity & Resistance Coefficient K_Row1 + FTO/FTC Wall Impingement Check
+  let row1ResistanceK = 1.0;
+  let row1PeakVelocity_m_s = trimExitVelocity_m_s;
+  if (isAdvanced3D) {
+    const rawK1 = flowDir === 'FTC' ? 2.45 : 1.85;
+    const stageK1 = 1 + (rawK1 - 1) / Math.sqrt(Math.max(1, stages));
+    row1ResistanceK = isCompensated ? 1 + 0.45 * (stageK1 - 1) : stageK1;
+    const velPeakFactor =
+      flowDir === 'FTC' ? (isCompensated ? 1.10 : 1.32) : isCompensated ? 1.12 : 1.28;
+    row1PeakVelocity_m_s = trimExitVelocity_m_s * velPeakFactor;
+  }
+
+  let ftoWallImpingementWarning = false;
+  let flowDirectionRecommendation = '';
+  if (point.fluidPhase === 'LIQUID') {
+    if (flowDir === 'FTO') {
+      ftoWallImpingementWarning =
+        regime !== 'NON_CAVITATING' || localCavitationRiskWarning || row1PeakVelocity_m_s > 15;
+      flowDirectionRecommendation = ftoWallImpingementWarning
+        ? 'Switch to FTC (Flow-Over-Plug): FTO directs high-velocity / cavitating jets outward against the valve body wall; FTC forces opposing radial jets to collide in the cage center away from metal boundaries.'
+        : 'FTO acceptable for clean low-ΔP liquid; FTC preferred if ΔP rises to isolate bubble implosion in cage core.';
+    } else {
+      flowDirectionRecommendation =
+        'Optimal (FTC / Flow-Over-Plug): Opposing inward radial jets collide in cage bore center away from body pressure boundary.';
+    }
+  } else {
+    flowDirectionRecommendation =
+      flowDir === 'FTO'
+        ? 'Optimal (FTO / Flow-Under-Plug): Inside-out expansion gives increasing annular area for compressible gas/steam volume expansion.'
+        : 'FTC stable at low lift; consider FTO for high-expansion compressible gas/steam service.';
+  }
+
+  // Singh, Aliyu, Mishra et al. (2020) 4-Quadrant Multiphase Gas/Vapor Void Maldistribution
+  let multiphaseQuadrantMaldistributionPct = 0;
+  if (isAdvanced3D) {
+    if (point.fluidPhase === 'TWO_PHASE') {
+      const fg = Math.min(0.95, Math.max(0.05, point.massFractionGas_fg ?? 0.12));
+      const rawMal = 18 + 22 * Math.sin(Math.PI * fg);
+      multiphaseQuadrantMaldistributionPct = rawMal * (isCompensated ? 0.45 : 1.0);
+    } else if (regime === 'FLASHING' || regime === 'SEVERE_CAVITATION') {
+      const rawMal = regime === 'FLASHING' ? 32.0 : 21.0;
+      multiphaseQuadrantMaldistributionPct = rawMal * (isCompensated ? 0.45 : 1.0);
+    } else if (regime === 'CHOKING_CAVITATION' || localCavitationRiskWarning) {
+      multiphaseQuadrantMaldistributionPct = 12.0 * (isCompensated ? 0.45 : 1.0);
+    }
+  }
+
   return {
     id: point.id,
     label: point.label,
@@ -1148,6 +1233,13 @@ export function evaluateOperatingCase(params: {
     strokeToPortAspectRatio,
     lowFreqPulsationRisk,
     oshaNioshExposureSummary,
+    localFlankSigma_min: Number(localFlankSigma_min.toFixed(2)),
+    row1PeakVelocity_m_s: Number(row1PeakVelocity_m_s.toFixed(1)),
+    row1ResistanceK: Number(row1ResistanceK.toFixed(2)),
+    localCavitationRiskWarning,
+    ftoWallImpingementWarning,
+    flowDirectionRecommendation,
+    multiphaseQuadrantMaldistributionPct: Number(multiphaseQuadrantMaldistributionPct.toFixed(1)),
   };
 }
 

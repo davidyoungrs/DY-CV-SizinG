@@ -87,6 +87,9 @@ import {
   CageMaterialId,
   HOLE_SPACING_RULES,
   HoleSpacingRuleId,
+  SizingMethodologyMode,
+  TrimManufacturingProcessId,
+  TRIM_MANUFACTURING_PROCESSES,
   synthesizeDrilledCageAndStress,
   evaluateSibandaLocalHoleFactor,
   generateUnrolledCageDXF,
@@ -122,8 +125,8 @@ import {
 } from './engine/industryStandards';
 
 // Application revision displayed in the header title bar & browser tab.
-// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.6) unless minor/major escalation is requested.
-export const APP_VERSION = '1.0.5';
+// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.7) unless minor/major escalation is requested.
+export const APP_VERSION = '1.0.6';
 
 type ActiveTabId =
   | 'PROCESS_SIZING'
@@ -337,7 +340,9 @@ export default function App() {
     ],
   });
 
-  // 4. Drilled Cage Synthesis & Hoop Stress State
+  // 4. Drilled Cage Synthesis, Local 3D Methodology & Hoop Stress State
+  const [methodologyMode, setMethodologyMode] = useState<SizingMethodologyMode>('ADVANCED_LOCAL_3D');
+  const [manufacturingProcess, setManufacturingProcess] = useState<TrimManufacturingProcessId>('CNC_DRILLED');
   const [numRows, setNumRows] = useState<number>(12);
   const [baseHoleDia_mm, setBaseHoleDia_mm] = useState<number>(4.2);
   const [modulateHoleDiameter, setModulateHoleDiameter] = useState<boolean>(true);
@@ -350,8 +355,24 @@ export default function App() {
   const [cageMaterial, setCageMaterial] = useState<CageMaterialId>('SS410_HT');
   const [requireNaceSourService, setRequireNaceSourService] = useState<boolean>(false);
   const [livePlugTravelPct, setLivePlugTravelPct] = useState<number>(68);
-  const [numConcentricStages, setNumConcentricStages] = useState<1 | 2 | 3>(1);
+  const [numConcentricStages, setNumConcentricStages] = useState<1 | 2 | 3 | 4>(1);
   const [compensateGalleryAsymmetry, setCompensateGalleryAsymmetry] = useState<boolean>(false);
+
+  const handleMethodologyModeChange = (mode: SizingMethodologyMode) => {
+    setMethodologyMode(mode);
+    if (mode === 'CONVENTIONAL_1D') {
+      setModulateHoleDiameter(false);
+      setEnforceZeroDeadbandOverlap(false);
+      setCompensateGalleryAsymmetry(false);
+      setShowSibandaGalleryHeatmap(false);
+      setManufacturingProcess('CNC_DRILLED');
+    } else {
+      setModulateHoleDiameter(true);
+      setEnforceZeroDeadbandOverlap(true);
+      setCompensateGalleryAsymmetry(true);
+      setShowSibandaGalleryHeatmap(true);
+    }
+  };
 
   // Industry Standards & Body/Safety Specifications State
   const [bodyMaterial, setBodyMaterial] = useState<BodyMaterialGroupId>('WCB_1_1');
@@ -506,6 +527,54 @@ export default function App() {
     return Math.max(...operatingCases.map((c) => c.T1_degC), effectiveThermalTargetTemp_degC);
   }, [operatingCases, effectiveThermalTargetTemp_degC]);
 
+  const nextSmallerValveInfo = useMemo(() => {
+    const sorted = [...GENERIC_VALVE_SCHEDULE].sort((a, b) => a.dn - b.dn);
+    const idx = sorted.findIndex((s) => s.dn === selectedDN);
+    if (idx <= 0) return { ratedCv: undefined, label: undefined };
+    const smaller = sorted[idx - 1];
+    const corr = computeCorrelatedValveParameters({
+      dn: smaller.dn,
+      pressureClass,
+      bodyStyle,
+      trimStyle,
+      flowDirection,
+      reducedTrimFactor,
+      useExtendedStroke,
+    });
+    return {
+      ratedCv: corr.ratedCv,
+      label: `DN${smaller.dn} (${smaller.npsLabel})`,
+    };
+  }, [
+    selectedDN,
+    pressureClass,
+    bodyStyle,
+    trimStyle,
+    flowDirection,
+    reducedTrimFactor,
+    useExtendedStroke,
+  ]);
+
+  const governingOperatingPressures = useMemo(() => {
+    const active = effectiveOperatingCases.filter((c) => c.enabled);
+    if (active.length === 0) {
+      return { P1: 31.0, P2: 19.5, Pv: 1.0 };
+    }
+    const maxDpCase = active.reduce((prev, curr) =>
+      curr.P1_bar_a - curr.P2_bar_a > prev.P1_bar_a - prev.P2_bar_a ? curr : prev
+    );
+    return {
+      P1: maxDpCase.P1_bar_a,
+      P2: maxDpCase.P2_bar_a,
+      Pv: maxDpCase.Pv_bar_a,
+    };
+  }, [effectiveOperatingCases]);
+
+  const effectiveStages =
+    methodologyMode === 'ADVANCED_LOCAL_3D'
+      ? Math.max(TRIM_STYLES[trimStyle].stages, numConcentricStages)
+      : TRIM_STYLES[trimStyle].stages;
+
   // Evaluate preliminary required Cv across active operating cases to size cage and check area saturation
   const maxProcessRequiredCv = useMemo(() => {
     const activeCases = effectiveOperatingCases.filter((c) => c.enabled);
@@ -521,13 +590,15 @@ export default function App() {
         Kc: correlatedValve.Kc,
         xT: correlatedValve.xT,
         Fd: correlatedValve.Fd,
-        stages: TRIM_STYLES[trimStyle].stages,
+        stages: effectiveStages,
         drilledHoleDia_mm: baseHoleDia_mm,
         characteristicType: effectiveCharConfig.type,
         equalPctRangeability: effectiveCharConfig.equalPctRangeability,
         stroke_mm: correlatedValve.stroke_mm,
         flowDirection,
         cageMaterialId: cageMaterial,
+        methodologyMode,
+        compensateGalleryAsymmetry,
       });
       return res.requiredCv || 0;
     });
@@ -536,11 +607,13 @@ export default function App() {
     effectiveOperatingCases,
     piping,
     correlatedValve,
-    trimStyle,
+    effectiveStages,
     baseHoleDia_mm,
     effectiveCharConfig,
     flowDirection,
     cageMaterial,
+    methodologyMode,
+    compensateGalleryAsymmetry,
   ]);
 
   const cageSynthesis = useMemo(
@@ -569,6 +642,14 @@ export default function App() {
         maxProcessRequiredCv,
         numConcentricStages,
         compensateGalleryAsymmetry,
+        methodologyMode,
+        flowDirection,
+        manufacturingProcess,
+        upstreamP1_bar_a: governingOperatingPressures.P1,
+        downstreamP2_bar_a: governingOperatingPressures.P2,
+        vaporPressurePv_bar_a: governingOperatingPressures.Pv,
+        nextSmallerSizeRatedCv: nextSmallerValveInfo.ratedCv,
+        nextSmallerSizeLabel: nextSmallerValveInfo.label,
       }),
     [
       correlatedValve,
@@ -589,6 +670,11 @@ export default function App() {
       maxProcessRequiredCv,
       numConcentricStages,
       compensateGalleryAsymmetry,
+      methodologyMode,
+      flowDirection,
+      manufacturingProcess,
+      governingOperatingPressures,
+      nextSmallerValveInfo,
     ]
   );
 
@@ -607,13 +693,15 @@ export default function App() {
             Kc: correlatedValve.Kc,
             xT: correlatedValve.xT,
             Fd: cageSynthesis.styleModifierFd,
-            stages: TRIM_STYLES[trimStyle].stages,
+            stages: effectiveStages,
             drilledHoleDia_mm: cageSynthesis.meanHoleDia_mm,
             characteristicType: effectiveCharConfig.type,
             equalPctRangeability: effectiveCharConfig.equalPctRangeability,
             stroke_mm: correlatedValve.stroke_mm,
             flowDirection,
             cageMaterialId: cageMaterial,
+            methodologyMode,
+            compensateGalleryAsymmetry,
           })
         ),
     [
@@ -621,10 +709,12 @@ export default function App() {
       piping,
       correlatedValve,
       cageSynthesis,
-      trimStyle,
+      effectiveStages,
       effectiveCharConfig,
       flowDirection,
       cageMaterial,
+      methodologyMode,
+      compensateGalleryAsymmetry,
     ]
   );
 
@@ -864,7 +954,9 @@ export default function App() {
           r.regimeSeverity === 'WARNING' ||
           r.noiseStatus === 'WARNING' ||
           r.percentOfRatedCv > 85 ||
-          r.percentOfRatedCv < 10
+          r.percentOfRatedCv < 10 ||
+          r.localCavitationRiskWarning ||
+          r.ftoWallImpingementWarning
       ) || Boolean(backpressureOrificeResult?.caseShares.some((s) => s.orificeChokedWarning));
     const PROCESS_SIZING = processCritical ? 'CRITICAL' : processWarning ? 'WARNING' : 'PASS';
 
@@ -1131,6 +1223,10 @@ export default function App() {
         piping,
         operatingCases,
         charConfig,
+        methodologyMode,
+        manufacturingProcess,
+        numConcentricStages,
+        compensateGalleryAsymmetry,
         numRows,
         baseHoleDia_mm,
         modulateHoleDiameter,
@@ -1231,6 +1327,10 @@ export default function App() {
         if (inp.piping) setPiping(inp.piping);
         if (Array.isArray(inp.operatingCases)) setOperatingCases(inp.operatingCases);
         if (inp.charConfig) setCharConfig(inp.charConfig);
+        if (inp.methodologyMode !== undefined) setMethodologyMode(inp.methodologyMode);
+        if (inp.manufacturingProcess !== undefined) setManufacturingProcess(inp.manufacturingProcess);
+        if (inp.numConcentricStages !== undefined) setNumConcentricStages(inp.numConcentricStages);
+        if (inp.compensateGalleryAsymmetry !== undefined) setCompensateGalleryAsymmetry(inp.compensateGalleryAsymmetry);
         if (inp.numRows !== undefined) setNumRows(inp.numRows);
         if (inp.baseHoleDia_mm !== undefined) setBaseHoleDia_mm(inp.baseHoleDia_mm);
         if (inp.modulateHoleDiameter !== undefined) setModulateHoleDiameter(inp.modulateHoleDiameter);
@@ -1610,6 +1710,74 @@ export default function App() {
                 </button>
               );
             })}
+          </div>
+
+          {/* MASTER SIZING & CAGE METHODOLOGY SWITCH (CONVENTIONAL 1D VS ADVANCED 3D LOCAL FLOW) */}
+          <div className="bg-[#182028] rounded-xl px-4 py-2.5 border border-[#2f3b47] shadow-sm flex flex-wrap items-center justify-between gap-3">
+            <div className="flex flex-wrap items-center gap-3">
+              <span className="text-[11px] font-mono font-bold uppercase tracking-wider text-[#ffd77a] flex items-center gap-1.5">
+                <Cpu className="w-3.5 h-3.5" />
+                Sizing &amp; Trim Methodology:
+              </span>
+              <div className="inline-flex rounded-lg p-0.5 bg-[#0f1419] border border-[#2f3b47]">
+                <button
+                  type="button"
+                  onClick={() => handleMethodologyModeChange('CONVENTIONAL_1D')}
+                  className={`px-3 py-1 rounded text-xs font-mono font-semibold transition ${
+                    methodologyMode === 'CONVENTIONAL_1D'
+                      ? 'bg-[#f2a900] text-[#0b2545] shadow-sm'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                  title="Standard lumped 1D IEC 60534 sizing & uniform circular cage rows"
+                >
+                  Conventional 1D (IEC Uniform)
+                </button>
+                <button
+                  type="button"
+                  onClick={() => handleMethodologyModeChange('ADVANCED_LOCAL_3D')}
+                  className={`px-3 py-1 rounded text-xs font-mono font-semibold transition ${
+                    methodologyMode === 'ADVANCED_LOCAL_3D'
+                      ? 'bg-[#0f8b8d] text-white shadow-sm'
+                      : 'text-slate-300 hover:text-white'
+                  }`}
+                  title="Sibanda (2022) 3D gallery crossflow, Singh (2019/2020) roughness & multiphase, Bu (2022) 15-plane, FTO/FTC directional physics"
+                >
+                  Advanced 3D Local Flow (Sibanda / Singh / Asim)
+                </button>
+              </div>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 text-[11px] font-mono">
+              <span className="px-2 py-0.5 rounded bg-[#0f1419] border border-[#2f3b47] text-[#7fe0e2]">
+                Dir:{' '}
+                <strong>
+                  {flowDirection === 'FTC'
+                    ? 'FTC (Outside→In Core Impingement)'
+                    : 'FTO (Inside→Out Gallery Expansion)'}
+                </strong>
+              </span>
+              {methodologyMode === 'ADVANCED_LOCAL_3D' ? (
+                <>
+                  <span className="px-2 py-0.5 rounded bg-[#0f1419] border border-[#2f3b47] text-[#8be0a8]">
+                    3D Trim Gain: <strong>+{cageSynthesis.advancedCapacityGainPct}% Cv</strong>
+                  </span>
+                  <span
+                    className={`px-2 py-0.5 rounded bg-[#0f1419] border border-[#2f3b47] ${
+                      cageSynthesis.canDownsizeValveBody ? 'text-[#8be0a8]' : 'text-slate-300'
+                    }`}
+                    title={cageSynthesis.downsizeCandidateLabel}
+                  >
+                    {cageSynthesis.canDownsizeValveBody
+                      ? `Downsize Ready (${nextSmallerValveInfo.label || '1 Step'})`
+                      : 'Current DN Required'}
+                  </span>
+                </>
+              ) : (
+                <span className="px-2 py-0.5 rounded bg-[#0f1419] border border-[#2f3b47] text-slate-400">
+                  Uniform Cd • No Local Flank / Roughness Corrections
+                </span>
+              )}
+            </div>
           </div>
 
           {/* GLOBAL VALVE HARDWARE SELECTORS */}
@@ -3488,6 +3656,41 @@ export default function App() {
                         ))}
                       </tr>
 
+                      <tr className="hover:bg-[#f8fafc] bg-[#f8fafc]/60">
+                        <th className="py-2.5 px-3 font-semibold text-[#0f8b8d] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#f8fafc] border-r border-[#cfd8e3]">
+                          Local 3D Flank / Row-1 σ_min (Sibanda 2022)
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3">
+                            {r.fluidPhase === 'LIQUID' ? (
+                              <div className="flex items-center gap-1.5 flex-wrap">
+                                <span
+                                  className={`font-bold ${
+                                    r.localCavitationRiskWarning
+                                      ? 'text-amber-600'
+                                      : r.localFlankSigma_min < r.sigmaIncipient_i
+                                      ? 'text-red-600'
+                                      : 'text-emerald-700'
+                                  }`}
+                                >
+                                  σ_loc={r.localFlankSigma_min}
+                                </span>
+                                <span className="text-[10px] text-slate-500">
+                                  (vs σ_i={r.sigmaIncipient_i})
+                                </span>
+                                {r.localCavitationRiskWarning && (
+                                  <span className="px-1.5 py-0.5 rounded bg-amber-100 border border-amber-300 text-amber-800 text-[9.5px] font-bold">
+                                    LOCAL CAV ONSET
+                                  </span>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400">N/A ({r.fluidPhase})</span>
+                            )}
+                          </td>
+                        ))}
+                      </tr>
+
                       <tr className="hover:bg-[#f8fafc]">
                         <th className="py-2.5 px-3 font-semibold text-[#13315c] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-white border-r border-[#cfd8e3]">
                           Regime Classification
@@ -3550,6 +3753,58 @@ export default function App() {
                             </td>
                           );
                         })}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc] bg-[#f8fafc]/60">
+                        <th className="py-2.5 px-3 font-semibold text-[#0f8b8d] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#f8fafc] border-r border-[#cfd8e3]">
+                          Row-1 Peak Vel / K1 &amp; FTO-FTC Physics
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3" title={r.flowDirectionRecommendation}>
+                            <div className="flex flex-col gap-0.5">
+                              <span
+                                className={`font-semibold ${
+                                  r.ftoWallImpingementWarning ? 'text-red-600 font-bold' : 'text-[#0b2545]'
+                                }`}
+                              >
+                                {r.row1PeakVelocity_m_s} m/s{' '}
+                                <span className="text-[10px] text-slate-500 font-normal">
+                                  (K₁={r.row1ResistanceK})
+                                </span>
+                              </span>
+                              {r.ftoWallImpingementWarning ? (
+                                <span className="px-1.5 py-0.5 rounded bg-red-100 border border-red-300 text-red-700 text-[9.5px] font-bold w-fit">
+                                  FTO WALL IMPINGEMENT → USE FTC
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-[#0f8b8d] font-semibold">
+                                  {flowDirection} Direction OK
+                                </span>
+                              )}
+                            </div>
+                          </td>
+                        ))}
+                      </tr>
+
+                      <tr className="hover:bg-[#f8fafc] bg-[#f8fafc]/60">
+                        <th className="py-2.5 px-3 font-semibold text-[#0f8b8d] sticky left-0 z-10 hover:z-30 focus-within:z-30 bg-[#f8fafc] border-r border-[#cfd8e3]">
+                          4-Quad Void Maldistribution (Singh 2020)
+                        </th>
+                        {caseResults.map((r) => (
+                          <td key={r.id} className="py-2.5 px-3">
+                            {r.multiphaseQuadrantMaldistributionPct > 0 ? (
+                              <span className="font-bold text-amber-700">
+                                ±{r.multiphaseQuadrantMaldistributionPct}% void skew
+                              </span>
+                            ) : (
+                              <span className="text-slate-500">
+                                {methodologyMode === 'CONVENTIONAL_1D'
+                                  ? '0% (1D Homogeneous)'
+                                  : '0% (Single-Phase)'}
+                              </span>
+                            )}
+                          </td>
+                        ))}
                       </tr>
 
                       <tr className="hover:bg-[#f8fafc]">
@@ -4494,6 +4749,55 @@ export default function App() {
                 </div>
 
                 <div className="p-5 space-y-4">
+                  {/* Tab 3 Methodology Mode Toggle & Manufacturer Downsizing Readiness Banner */}
+                  <div className="bg-[#182028] rounded-lg p-3 border border-[#2f3b47] space-y-2">
+                    <div className="flex items-center justify-between gap-2">
+                      <span className="text-[10.5px] font-mono font-bold text-[#ffd77a] uppercase">
+                        Synthesis Mode ({flowDirection})
+                      </span>
+                      <div className="inline-flex rounded p-0.5 bg-[#0f1419] border border-[#2f3b47]">
+                        <button
+                          type="button"
+                          onClick={() => handleMethodologyModeChange('CONVENTIONAL_1D')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-semibold transition ${
+                            methodologyMode === 'CONVENTIONAL_1D'
+                              ? 'bg-[#f2a900] text-[#0b2545]'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          Conv. 1D
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleMethodologyModeChange('ADVANCED_LOCAL_3D')}
+                          className={`px-2 py-0.5 rounded text-[10.5px] font-mono font-semibold transition ${
+                            methodologyMode === 'ADVANCED_LOCAL_3D'
+                              ? 'bg-[#0f8b8d] text-white'
+                              : 'text-slate-300 hover:text-white'
+                          }`}
+                        >
+                          Adv. 3D Local
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="text-[10.5px] font-mono text-slate-200 flex items-center justify-between gap-2">
+                      <span>Effective 3D Trim Capacity Gain:</span>
+                      <strong className="text-[#8be0a8]">
+                        +{cageSynthesis.advancedCapacityGainPct}% Cv
+                      </strong>
+                    </div>
+                    <div
+                      className={`text-[10.5px] font-mono px-2 py-1 rounded border ${
+                        cageSynthesis.canDownsizeValveBody
+                          ? 'bg-emerald-950/50 border-emerald-500/40 text-[#8be0a8]'
+                          : 'bg-[#0f1419] border-[#2f3b47] text-slate-300'
+                      }`}
+                    >
+                      {cageSynthesis.downsizeCandidateLabel}
+                    </div>
+                  </div>
+
                   {/* Cage Area Saturation / Valve Upsize Recommended Diagnostic Alert */}
                   {cageSynthesis.saturationSeverity !== 'OPTIMAL' && (
                     <div
@@ -4643,14 +4947,42 @@ export default function App() {
                       </p>
                     </div>
 
-                    {/* Multi-Stage Concentric Sleeve & Sibanda 360° Asymmetric Drilling */}
+                    {/* Manufacturing Process & Internal Surface Roughness Derating (Singh et al., 2019) */}
+                    <div>
+                      <label className="block text-xs font-mono text-[#13315c] font-semibold mb-1">
+                        Trim Manufacturing &amp; Surface Roughness (Singh 2019 S_a / S_dr)
+                      </label>
+                      <select
+                        value={manufacturingProcess}
+                        disabled={methodologyMode === 'CONVENTIONAL_1D'}
+                        onChange={(e) =>
+                          setManufacturingProcess(e.target.value as TrimManufacturingProcessId)
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none disabled:opacity-60"
+                      >
+                        {Object.values(TRIM_MANUFACTURING_PROCESSES).map((mp) => (
+                          <option key={mp.id} value={mp.id}>
+                            {mp.label} (Cd×{mp.capacityFactor})
+                          </option>
+                        ))}
+                      </select>
+                      <p className="text-[10px] font-mono text-slate-500 mt-1">
+                        S_a = {cageSynthesis.surfaceRoughnessSa_um} µm | S_dr ={' '}
+                        {cageSynthesis.surfaceAreaRatioSdr_pct}% | Applied Capacity Factor:{' '}
+                        <strong className="text-[#0f8b8d]">
+                          {cageSynthesis.surfaceRoughnessCapacityFactor}x
+                        </strong>
+                      </p>
+                    </div>
+
+                    {/* Multi-Stage Concentric Sleeve (1–4 Stages) & Sibanda 360° Asymmetric Drilling */}
                     <div className="p-3 rounded-lg bg-[#f8fafc] border border-[#cfd8e3] space-y-2.5">
                       <div className="flex items-center justify-between gap-2">
                         <span className="text-[11px] font-mono font-bold text-[#13315c] uppercase">
                           Concentric Sleeve Stack (ΔP Letdown)
                         </span>
                         <div className="flex gap-1">
-                          {([1, 2, 3] as const).map((st) => (
+                          {([1, 2, 3, 4] as const).map((st) => (
                             <button
                               key={st}
                               type="button"
@@ -4670,16 +5002,23 @@ export default function App() {
                         {cageSynthesis.concentricStages.map((s) => (
                           <div
                             key={s.stageIndex}
-                            className="flex items-center justify-between bg-white px-2 py-1 rounded border border-[#e2e8f0]"
+                            className="flex flex-wrap items-center justify-between gap-1 bg-white px-2 py-1 rounded border border-[#e2e8f0]"
                           >
                             <span className="font-bold text-[#0b2545]">
-                              Stage {s.stageIndex} (ID {s.sleeveID_mm} mm)
+                              Stg {s.stageIndex} (ID {s.sleeveID_mm}mm)
                             </span>
                             <span className="text-slate-600">
-                              A={s.targetArea_mm2} mm² ({s.areaRatioToStage1}x)
+                              A={s.targetArea_mm2}mm² ({s.areaRatioToStage1}x)
                             </span>
                             <span className="text-[#0f8b8d] font-bold">
-                              ΔP={s.stageDeltaP_bar} bar ({s.stagePressureDropSharePct}%)
+                              ΔP={s.stageDeltaP_bar}b ({s.stagePressureDropSharePct}%)
+                            </span>
+                            <span
+                              className={`text-[9.5px] font-bold ${
+                                s.stageCavitationSafe ? 'text-emerald-700' : 'text-red-600'
+                              }`}
+                            >
+                              P_out={s.stageOutletPressure_bar_a}b {s.stageCavitationSafe ? '>Pv' : '≤Pv'}
                             </span>
                           </div>
                         ))}
@@ -4687,13 +5026,14 @@ export default function App() {
                       <label className="flex items-center gap-2 text-[11px] font-mono text-[#0b2545] cursor-pointer pt-1">
                         <input
                           type="checkbox"
+                          disabled={methodologyMode === 'CONVENTIONAL_1D'}
                           checked={compensateGalleryAsymmetry}
                           onChange={(e) => setCompensateGalleryAsymmetry(e.target.checked)}
                           className="accent-[#0f8b8d]"
                         />
-                        Sibanda Eq. 5.10 Asymmetric 360° Sector Drilling Compensation
+                        360° Asymmetric Sector Drilling ({flowDirection} Inverse Compensation)
                       </label>
-                      {compensateGalleryAsymmetry && (
+                      {cageSynthesis.compensateGalleryAsymmetry && (
                         <div className="text-[10px] font-mono text-slate-600 bg-white px-2 py-1 rounded border border-[#e2e8f0]">
                           Sector Area Multipliers (0°→315°):{' '}
                           {cageSynthesis.sectorCompensationFactors
@@ -5051,10 +5391,10 @@ export default function App() {
 
                       return (
                         <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-80">
-                          {/* Sibanda (2022) 3D Gallery Flank Boundary-Layer Separation / Cavitation Risk Zones (135° & 225°) */}
-                          {showSibandaGalleryHeatmap && (
+                          {/* Direction-Aware 3D Gallery Separation / Impingement Heatmap Zones */}
+                          {showSibandaGalleryHeatmap && methodologyMode === 'ADVANCED_LOCAL_3D' && (
                             <g>
-                              {[135, 225].map((sepDeg) => {
+                              {(flowDirection === 'FTC' ? [135, 225] : [90, 270]).map((sepDeg) => {
                                 const xCenter = padL + (sepDeg / 360) * plotW;
                                 const bandW = (28 / 360) * plotW;
                                 return (
@@ -5074,7 +5414,9 @@ export default function App() {
                                       fill="#ffd77a"
                                       className="text-[8.5px] font-mono"
                                     >
-                                      {sepDeg}° VORTEX / MIN Cv
+                                      {flowDirection === 'FTC'
+                                        ? `${sepDeg}° VORTEX / MIN Cv`
+                                        : `${sepDeg}° NECK ACCEL`}
                                     </text>
                                   </g>
                                 );
@@ -5083,19 +5425,23 @@ export default function App() {
                                 x={padL + 4}
                                 y={padT - 8}
                                 textAnchor="start"
-                                fill="#8be0a8"
+                                fill={flowDirection === 'FTC' ? '#8be0a8' : '#ff8a80'}
                                 className="text-[8.5px] font-mono"
                               >
-                                0° INLET STAGNATION PEAK
+                                {flowDirection === 'FTC'
+                                  ? '0° INLET STAGNATION PEAK'
+                                  : '0° BLIND WALL IMPINGEMENT'}
                               </text>
                               <text
                                 x={padL + 0.5 * plotW}
                                 y={padT - 8}
                                 textAnchor="middle"
-                                fill="#7fe0e2"
+                                fill={flowDirection === 'FTC' ? '#7fe0e2' : '#8be0a8'}
                                 className="text-[8.5px] font-mono"
                               >
-                                180° REAR COLLISION RECOVERY
+                                {flowDirection === 'FTC'
+                                  ? '180° REAR COLLISION RECOVERY'
+                                  : '180° OUTLET SUCTION PEAK'}
                               </text>
                             </g>
                           )}
@@ -5149,14 +5495,6 @@ export default function App() {
                           {/* Drilled Orifice Rows */}
                           {cageSynthesis.rows.map((row) => {
                             const cy = padT + plotH - (row.zElevation_mm / maxZ) * plotH;
-                            const ryPx = Math.max(
-                              2.0,
-                              ((row.holeDia_mm * 0.5) / maxZ) * plotH
-                            );
-                            const rxPx = Math.max(
-                              2.0,
-                              ((row.holeDia_mm * 0.5) / circum) * plotW
-                            );
 
                             const openFrac =
                               plugZ_mm <= row.zBottom_mm
@@ -5164,6 +5502,17 @@ export default function App() {
                                 : plugZ_mm >= row.zTop_mm
                                 ? 1
                                 : (plugZ_mm - row.zBottom_mm) / Math.max(0.1, row.holeDia_mm);
+
+                            const rowHoles =
+                              row.individualHoles && row.individualHoles.length > 0
+                                ? row.individualHoles
+                                : Array.from({ length: row.holeCount }, (_, j) => ({
+                                    holeIndex: j + 1,
+                                    angle_deg: (row.angularOffset_deg + (j * 360) / row.holeCount) % 360,
+                                    holeDia_mm: row.holeDia_mm,
+                                    localSibandaWeight: 1.0,
+                                    flowZone: 'TRANSITION',
+                                  }));
 
                             return (
                               <g key={row.rowIndex}>
@@ -5184,23 +5533,31 @@ export default function App() {
                                 >
                                   R{row.rowIndex} ({row.zElevation_mm}mm)
                                 </text>
-                                {Array.from({ length: row.holeCount }).map((_, j) => {
-                                  const deg =
-                                    (row.angularOffset_deg + (j * 360) / row.holeCount) % 360;
-                                  const cx = padL + (deg / 360) * plotW;
+                                {rowHoles.map((hole, j) => {
+                                  const cx = padL + (hole.angle_deg / 360) * plotW;
+                                  const ryPx = Math.max(
+                                    2.0,
+                                    ((hole.holeDia_mm * 0.5) / maxZ) * plotH
+                                  );
+                                  const rxPx = Math.max(
+                                    2.0,
+                                    ((hole.holeDia_mm * 0.5) / circum) * plotW
+                                  );
 
                                   const sibanda = evaluateSibandaLocalHoleFactor({
-                                    angle_deg: deg,
+                                    angle_deg: hole.angle_deg,
                                     zElevation_mm: row.zElevation_mm,
                                     stroke_mm: correlatedValve.stroke_mm,
-                                    holeDia_mm: row.holeDia_mm,
+                                    holeDia_mm: hole.holeDia_mm,
                                     cageID_mm: cageSynthesis.cageID_mm,
+                                    flowDirection,
+                                    methodologyMode,
                                   });
 
                                   let strokeColor = '#2f3b47';
                                   let fillColor = '#182028';
                                   if (openFrac > 0) {
-                                    if (showSibandaGalleryHeatmap) {
+                                    if (showSibandaGalleryHeatmap && methodologyMode === 'ADVANCED_LOCAL_3D') {
                                       if (sibanda.relativeWeight >= 1.04) {
                                         strokeColor = '#8be0a8';
                                         fillColor =
@@ -5231,6 +5588,7 @@ export default function App() {
 
                                   return (
                                     <g key={j}>
+                                      <title>{`R${row.rowIndex} H${hole.holeIndex} @ ${hole.angle_deg}° | Ø${hole.holeDia_mm} mm | Local Weight ${sibanda.relativeWeight}x (${sibanda.flowZone})`}</title>
                                       <ellipse
                                         cx={cx}
                                         cy={cy}
@@ -5271,31 +5629,44 @@ export default function App() {
                     })()}
                   </div>
 
-                  {/* Legend for Zero-Deadband & Sibanda (2022) 3D Gallery Physics (Dark Instrument Tiles) */}
+                  {/* Legend for Zero-Deadband & Direction-Aware 3D Gallery Physics (Dark Instrument Tiles) */}
                   <div className="instrument-panel rounded-xl p-3 grid grid-cols-1 md:grid-cols-3 gap-3 text-[11px] font-mono">
                     <div className="instrument-tile rounded-lg p-2.5">
                       <span className="text-[#8be0a8] font-bold block">
-                        1. Zero Initial &amp; Inter-Row Deadband
+                        1.{' '}
+                        {methodologyMode === 'CONVENTIONAL_1D'
+                          ? 'Conventional Uniform 1D Spacing'
+                          : 'Zero Initial & Inter-Row Deadband'}
                       </span>
                       <span className="text-slate-300">
-                        Row 1 bottom tangent to Z=0.0mm; adjacent staggered rows overlap vertically by{' '}
-                        {cageSynthesis.meanRowOverlapPct}% (p_z &lt; d_h) so dA/dh &gt; 0 everywhere.
+                        {methodologyMode === 'CONVENTIONAL_1D'
+                          ? `Conventional uniform holes without forced overlap (${cageSynthesis.deadbandStrokePct}% axial deadband).`
+                          : `Row 1 tangent to Z=0.0mm; staggered rows overlap by ${cageSynthesis.meanRowOverlapPct}% (p_z < d_h) so dA/dh > 0 everywhere.`}
                       </span>
                     </div>
                     <div className="instrument-tile rounded-lg p-2.5">
                       <span className="text-[#7fe0e2] font-bold block">
-                        2. Sibanda (2022) Eq. 5.10 Gallery Flow
+                        2. {flowDirection === 'FTC' ? 'FTC Outside→In (Sibanda 2022)' : 'FTO Inside→Out (Core Supply)'}
                       </span>
                       <span className="text-slate-300">
-                        Cv_hole = A·Re^a·D^b·HT^c·θ̄^d (R²=0.947): Peak Cv at 0° inlet stagnation &amp; upper rows (HT^0.150).
+                        {methodologyMode === 'CONVENTIONAL_1D'
+                          ? '1D mode assumes uniform circumferential & axial hole Cv = 1.00x across all holes.'
+                          : flowDirection === 'FTC'
+                          ? 'Crossflow around cage peaks at 0° inlet stagnation & upper rows (HT^0.150); inward jets collide at cage center.'
+                          : 'Core supply exits outward: 180° outlet nozzle sees lowest backpressure (+18% flow); 0° blind wall sees high impingement.'}
                       </span>
                     </div>
                     <div className="instrument-tile rounded-lg p-2.5">
                       <span className="text-[#ffd77a] font-bold block">
-                        3. Flank Separation Zones (135° &amp; 225°)
+                        3.{' '}
+                        {flowDirection === 'FTC'
+                          ? 'Flank Separation Zones (135° & 225°)'
+                          : 'Seat-Lip Throat & Neck Accel (90°/270°)'}
                       </span>
                       <span className="text-slate-300">
-                        Boundary-layer separation at θ ≈ 135° &amp; 225° reduces local hole ΔP and Cv, concentrating cavitation risk.
+                        {flowDirection === 'FTC'
+                          ? 'Boundary-layer separation at θ ≈ 135° & 225° drops local ΔP and Cv, concentrating cavitation risk unless sector-compensated.'
+                          : 'Row-1 seat-lip separation dips low-lift flow while outward liquid jets risk gallery wall impingement at 0°/90°/270°.'}
                       </span>
                     </div>
                   </div>
@@ -5428,14 +5799,20 @@ export default function App() {
                 </div>
               </div>
 
-              {/* Chart B: Sibanda (2022) Eq. 5.10 360° Gallery Circumferential Hole Cv Distribution */}
+              {/* Chart B: Sibanda (2022) Eq. 5.10 360° Gallery Circumferential Hole Cv Distribution (FTO vs FTC) */}
               <div className="lg:col-span-5 dy-card overflow-hidden">
                 <div className="section-band px-5 py-3.5">
                   <h3 className="text-sm font-bold text-white">
-                    Sibanda (2022) Ch. 5 Gallery Circumferential Hole Cv(θ) Profile
+                    {flowDirection === 'FTC'
+                      ? 'Sibanda (2022) Ch. 5 FTC Circumferential Cv(θ) Profile'
+                      : 'Masoneilan / Severn FTO Core-to-Gallery Cv(θ) Profile'}
                   </h3>
                   <p className="text-xs text-slate-300 font-mono">
-                    Normalized Local Orifice Capacity around 0°–360° Gallery (Inlet 0° vs. 135°/225° Separation vs. 180° Rear)
+                    {methodologyMode === 'CONVENTIONAL_1D'
+                      ? 'Conventional 1D Mode: Uniform 1.00x flow distribution assumed across 0°–360°'
+                      : flowDirection === 'FTC'
+                      ? 'Outside→In: Inlet 0° Stagnation Peak vs. 135°/225° Flank Separation vs. 180° Rear'
+                      : 'Inside→Out: 0° Blind Wall Backpressure vs. 90°/270° Neck vs. 180° Outlet Suction Peak'}
                   </p>
                 </div>
 
@@ -5449,7 +5826,11 @@ export default function App() {
                         <svg viewBox="0 0 460 230" className="w-full h-52 overflow-visible">
                           {[0, 90, 135, 180, 225, 270, 360].map((deg) => {
                             const x = 42 + (deg / 360) * 395;
-                            const isSep = deg === 135 || deg === 225;
+                            const isSep =
+                              methodologyMode === 'ADVANCED_LOCAL_3D' &&
+                              (flowDirection === 'FTC'
+                                ? deg === 135 || deg === 225
+                                : deg === 0 || deg === 180);
                             return (
                               <g key={deg}>
                                 <line
@@ -5498,7 +5879,7 @@ export default function App() {
                             );
                           })}
 
-                          {/* Upper Row (HT = 0.90) Sibanda Profile (#8be0a8) */}
+                          {/* Upper Row (HT = 0.90) Directional Profile (#8be0a8) */}
                           <polyline
                             fill="none"
                             stroke="#8be0a8"
@@ -5511,6 +5892,8 @@ export default function App() {
                                   stroke_mm: correlatedValve.stroke_mm,
                                   holeDia_mm: baseHoleDia_mm,
                                   cageID_mm: cageSynthesis.cageID_mm,
+                                  flowDirection,
+                                  methodologyMode,
                                 });
                                 const x = 42 + (deg / 360) * 395;
                                 const y = 195 - ((s.relativeWeight - 0.7) / 0.6) * 165;
@@ -5519,7 +5902,7 @@ export default function App() {
                               .join(' ')}
                           />
 
-                          {/* Bottom Seat Row (HT = 0.12) Sibanda Profile (#7fe0e2) */}
+                          {/* Bottom Seat Row (HT = 0.12) Directional Profile (#7fe0e2) */}
                           <polyline
                             fill="none"
                             stroke="#7fe0e2"
@@ -5533,6 +5916,8 @@ export default function App() {
                                   stroke_mm: correlatedValve.stroke_mm,
                                   holeDia_mm: baseHoleDia_mm,
                                   cageID_mm: cageSynthesis.cageID_mm,
+                                  flowDirection,
+                                  methodologyMode,
                                 });
                                 const x = 42 + (deg / 360) * 395;
                                 const y = 195 - ((s.relativeWeight - 0.7) / 0.6) * 165;
@@ -5547,6 +5932,127 @@ export default function App() {
                 </div>
               </div>
             </div>
+
+            {/* Bu, Aliyu, & Mishra (2022) 15-Plane 1D Axial Pressure & Local Cv(x/D) Surrogate Profile */}
+            {cageSynthesis.axial15PlaneProfile.length > 0 && (
+              <div className="dy-card overflow-hidden">
+                <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h3 className="text-sm font-bold text-white">
+                      Bu, Aliyu, &amp; Mishra (2022) 15-Plane 1D Axial Pressure &amp; Local Cv(x/D) Profile
+                    </h3>
+                    <p className="text-xs text-slate-300 font-mono">
+                      Axial static pressure P(x/D) [Teal] &amp; local jet velocity V(x/D) [Amber] from -2.0D upstream to +6.0D downstream recovery tap
+                    </p>
+                  </div>
+                  <span className="px-2.5 py-1 rounded bg-[#182028] text-[#7fe0e2] border border-[#2f3b47] text-xs font-mono font-bold">
+                    {cageSynthesis.numConcentricStages}-Stage Recovery • P_vc ={' '}
+                    {Math.min(...cageSynthesis.axial15PlaneProfile.map((p) => p.localStaticPressure_bar))} bar a
+                  </span>
+                </div>
+
+                <div className="p-5 grid grid-cols-1 lg:grid-cols-12 gap-5 items-center">
+                  <div className="lg:col-span-7 instrument-panel rounded-lg p-4">
+                    {(() => {
+                      const planes = cageSynthesis.axial15PlaneProfile;
+                      const maxP = Math.max(1, ...planes.map((p) => p.localStaticPressure_bar)) * 1.05;
+                      const maxV = Math.max(1, ...planes.map((p) => p.localVelocity_m_s)) * 1.1;
+                      return (
+                        <svg viewBox="0 0 680 210" className="w-full h-48 overflow-visible">
+                          {[0, 0.25, 0.5, 0.75, 1.0].map((frac) => {
+                            const y = 175 - frac * 145;
+                            return (
+                              <g key={frac}>
+                                <line x1={48} y1={y} x2={625} y2={y} stroke="#2f3b47" strokeDasharray="3 3" />
+                                <text x={42} y={y + 3} textAnchor="end" className="fill-slate-400 text-[9.5px] font-mono">
+                                  {(frac * maxP).toFixed(1)}b
+                                </text>
+                                <text x={632} y={y + 3} textAnchor="start" className="fill-[#ffd77a] text-[9.5px] font-mono">
+                                  {(frac * maxV).toFixed(0)}m/s
+                                </text>
+                              </g>
+                            );
+                          })}
+
+                          {/* Static Pressure Curve (#7fe0e2) */}
+                          <polyline
+                            fill="none"
+                            stroke="#7fe0e2"
+                            strokeWidth="2.5"
+                            points={planes
+                              .map((p, idx) => {
+                                const x = 48 + (idx / (planes.length - 1)) * 577;
+                                const y = 175 - (p.localStaticPressure_bar / maxP) * 145;
+                                return `${x},${y}`;
+                              })
+                              .join(' ')}
+                          />
+
+                          {/* Local Velocity Curve (#ffd77a) */}
+                          <polyline
+                            fill="none"
+                            stroke="#ffd77a"
+                            strokeWidth="2.0"
+                            strokeDasharray="5 3"
+                            points={planes
+                              .map((p, idx) => {
+                                const x = 48 + (idx / (planes.length - 1)) * 577;
+                                const y = 175 - (p.localVelocity_m_s / maxV) * 145;
+                                return `${x},${y}`;
+                              })
+                              .join(' ')}
+                          />
+
+                          {planes.map((p, idx) => {
+                            const x = 48 + (idx / (planes.length - 1)) * 577;
+                            const yP = 175 - (p.localStaticPressure_bar / maxP) * 145;
+                            return (
+                              <g key={p.planeIndex}>
+                                <title>{`Plane ${p.planeIndex} (${p.locationLabel}, x/D=${p.xOverD}): P=${p.localStaticPressure_bar} bar a | V=${p.localVelocity_m_s} m/s | Local Cv=${p.localPlaneCv}`}</title>
+                                <circle cx={x} cy={yP} r="3.5" fill="#7fe0e2" stroke="#0f1419" strokeWidth="1.5" />
+                                {(idx % 2 === 0 || p.xOverD === 0.05) && (
+                                  <text x={x} y={195} textAnchor="middle" className="fill-slate-400 text-[8.5px] font-mono">
+                                    {p.xOverD}D
+                                  </text>
+                                )}
+                              </g>
+                            );
+                          })}
+                        </svg>
+                      );
+                    })()}
+                  </div>
+
+                  <div className="lg:col-span-5 overflow-x-auto max-h-56 border border-[#cfd8e3] rounded-lg">
+                    <table className="w-full text-left border-collapse text-[11px] font-mono">
+                      <thead>
+                        <tr className="bg-[#edf1f5] border-b border-[#cfd8e3] text-[#13315c] sticky top-0">
+                          <th className="py-1.5 px-2">Plane</th>
+                          <th className="py-1.5 px-2">x/D</th>
+                          <th className="py-1.5 px-2">P (bar a)</th>
+                          <th className="py-1.5 px-2">Vel (m/s)</th>
+                          <th className="py-1.5 px-2">Local Cv</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-[#e2e8f0]">
+                        {cageSynthesis.axial15PlaneProfile.map((p) => (
+                          <tr
+                            key={p.planeIndex}
+                            className={p.xOverD >= 0 && p.xOverD <= 0.15 ? 'bg-amber-50/70 font-semibold' : 'hover:bg-[#f8fafc]'}
+                          >
+                            <td className="py-1 px-2 text-[#0b2545]">#{p.planeIndex} {p.locationLabel}</td>
+                            <td className="py-1 px-2 text-slate-600">{p.xOverD}</td>
+                            <td className="py-1 px-2 text-[#0f8b8d] font-bold">{p.localStaticPressure_bar}</td>
+                            <td className="py-1 px-2 text-slate-700">{p.localVelocity_m_s}</td>
+                            <td className="py-1 px-2 text-emerald-700">{p.localPlaneCv}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              </div>
+            )}
 
             {/* Bottom Row: Discrete Axial Row Schedule Table */}
             <div className="dy-card overflow-hidden">
@@ -5594,7 +6100,16 @@ export default function App() {
                               [{r.zBottom_mm}–{r.zTop_mm}]
                             </span>
                           </td>
-                          <td className="py-2 px-3 text-[#0b2545]">Ø{r.holeDia_mm} mm</td>
+                          <td className="py-2 px-3 text-[#0b2545]">
+                            {(() => {
+                              const dias = r.individualHoles?.map((h) => h.holeDia_mm) || [r.holeDia_mm];
+                              const minD = Math.min(...dias);
+                              const maxD = Math.max(...dias);
+                              return minD === maxD
+                                ? `Ø${r.holeDia_mm} mm`
+                                : `Ø${minD}–${maxD} mm`;
+                            })()}
+                          </td>
                           <td className="py-2 px-3 font-bold text-[#0b2545]">{r.holeCount}</td>
                           <td className="py-2 px-3 text-emerald-700 font-semibold">
                             {r.rowIndex === 1 ? 'Seat Tangent' : `${r.axialOverlapPct}%`}
