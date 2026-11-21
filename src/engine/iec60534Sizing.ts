@@ -1,5 +1,6 @@
 import { evaluateStrokeDependentRecovery } from './valveSchedule.ts';
 import type { FlowDirectionId } from './valveSchedule.ts';
+import { evaluateSteamPT, evaluateSteamPH } from './iapwsIf97.ts';
 
 export type FluidPhase = 'LIQUID' | 'GAS' | 'STEAM' | 'TWO_PHASE';
 
@@ -32,6 +33,14 @@ export interface PipingConfiguration {
   upstreamPipeLength_m: number; // L_pipe (m) for Joukowsky water-hammer
   actuatorCloseTime_s: number; // Fast-close time t_close (s)
   bodyMaterialCategory: 'CARBON_STEEL' | 'STAINLESS_ALLOY';
+  // Turbine Bypass / PRDS Desuperheater & Downstream Diffuser Options
+  desuperheaterEnabled?: boolean;
+  sprayWaterTemp_degC?: number;
+  sprayWaterPressure_bar_a?: number;
+  targetDownstreamTemp_degC?: number;
+  downstreamDiffuserEnabled?: boolean;
+  diffuserCv?: number;
+  diffuserXt?: number;
 }
 
 export type CavitationRegime =
@@ -127,6 +136,22 @@ export interface CaseSizingResult {
   ftoWallImpingementWarning: boolean;
   flowDirectionRecommendation: string;
   multiphaseQuadrantMaldistributionPct: number;
+  // IAPWS-IF97 Steam Throttling, Desuperheater Attemperation & Diffuser Backpressure Split
+  steamInletEnthalpy_kJ_kg: number;
+  steamThrottledOutletTemp_degC: number;
+  steamOutletQuality: number;
+  sprayWaterFlow_kg_h: number;
+  totalOutletMassFlow_kg_h: number;
+  sprayRequiredCv: number;
+  outletTempAfterSpray_degC: number;
+  superheatMargin_degC: number;
+  sprayWaterWarning: string | null;
+  intermediatePressure_bar_a: number;
+  diffuserDeltaP_bar: number;
+  diffuserChoked: boolean;
+  diffuserNoise_dBA: number;
+  combinedBypassNoise_dBA: number;
+  diffuserBottleneckWarning: boolean;
 }
 
 export interface FluidPresetSpec {
@@ -236,6 +261,36 @@ export const FLUID_PRESETS: FluidPresetSpec[] = [
     compressibilityZ: 0.95,
     defaultT1_degC: 420,
     notes: 'High-temperature steam letdown requiring extended finned bonnet, hardened cage, and thermal lag check.',
+  },
+  {
+    id: 'HP_TURBINE_BYPASS',
+    name: 'HP Steam Turbine Bypass (170 bar / 540 °C)',
+    phase: 'STEAM',
+    rho_kg_m3: 54.8,
+    Pv_bar_a: 0,
+    Pc_bar_a: 220.64,
+    viscosity_cSt: 0.031,
+    speedOfSound_m_s: 675,
+    molecularWeight: 18.015,
+    gammaCpCv: 1.29,
+    compressibilityZ: 0.91,
+    defaultT1_degC: 540,
+    notes: 'Subcritical HP turbine bypass (IAPWS-IF97 + PRDS attemperation + downstream diffuser split).',
+  },
+  {
+    id: 'SC_TURBINE_BYPASS',
+    name: 'Supercritical Steam Bypass (260 bar / 580 °C)',
+    phase: 'STEAM',
+    rho_kg_m3: 84.5,
+    Pv_bar_a: 0,
+    Pc_bar_a: 220.64,
+    viscosity_cSt: 0.036,
+    speedOfSound_m_s: 695,
+    molecularWeight: 18.015,
+    gammaCpCv: 1.32,
+    compressibilityZ: 0.87,
+    defaultT1_degC: 580,
+    notes: 'Supercritical Region-3 steam bypass (>220.6 bar) using IAPWS-IF97 density, enthalpy, and throttling.',
   },
   {
     id: 'SATURATED_STEAM_12BAR',
@@ -443,27 +498,74 @@ function computeSteamSaturationProperties(P1_bar_a: number, T1_degC: number): {
   FSH: number;
   Z_steam: number;
   rho_steam: number;
+  gamma_steam: number;
+  enthalpy_kJ_kg: number;
+  speedOfSound_m_s: number;
 } {
-  // Antoine saturation curve for water/steam (P in Pa = P_bar * 1e5, valid ~0.1 to 215 bar a)
-  const P_Pa = Math.max(5000, Math.min(2.15e7, P1_bar_a * 1e5));
-  const Tsat_degC = 3816.44 / (23.1964 - Math.log(P_Pa)) - 227.02;
-  const superheat_degC = Math.max(0, T1_degC - Tsat_degC);
-  const FSH = 1 + 0.00126 * superheat_degC; // Equivalent Napier superheat factor for display
-
-  const T1_K = Math.max(250, T1_degC + 273.15);
-  const Pr = P1_bar_a / 220.6;
-  const Tr = T1_K / 647.1;
-  // Real-gas steam compressibility correlation anchored to IAPWS-IF97 near saturation & superheated region
-  const Z_steam = Math.max(0.55, Math.min(1.0, 1.0 - 0.48 * (Pr / Math.pow(Math.max(0.4, Tr), 3.2))));
-  const rho_steam = (P1_bar_a * 1e5 * 18.015) / Math.max(1, 8314.46 * T1_K * Z_steam);
-
+  const st = evaluateSteamPT(P1_bar_a, T1_degC);
+  const FSH = 1 + 0.00126 * st.superheat_degC;
   return {
-    Tsat_degC: Number(Tsat_degC.toFixed(1)),
-    superheat_degC: Number(superheat_degC.toFixed(1)),
+    Tsat_degC: st.Tsat_degC,
+    superheat_degC: st.superheat_degC,
     FSH: Number(FSH.toFixed(3)),
-    Z_steam: Number(Z_steam.toFixed(3)),
-    rho_steam,
+    Z_steam: st.compressibilityZ,
+    rho_steam: st.rho_kg_m3,
+    gamma_steam: st.gammaCpCv,
+    enthalpy_kJ_kg: st.enthalpy_kJ_kg,
+    speedOfSound_m_s: st.speedOfSound_m_s,
   };
+}
+
+/**
+ * Solves the intermediate pressure P_int between the control valve and a fixed
+ * downstream diffuser/sparger (Cv_diff) discharging to P_final at steam mass flow m_dot_kg_h.
+ */
+function solveDiffuserIntermediatePressure(params: {
+  P1_bar_a: number;
+  P_final_bar_a: number;
+  massFlow_kg_h: number;
+  enthalpy_kJ_kg: number;
+  diffuserCv: number;
+  diffuserXt: number;
+}): { P_int_bar_a: number; diffuserChoked: boolean; bottlenecked: boolean } {
+  const { P1_bar_a, P_final_bar_a, massFlow_kg_h, enthalpy_kJ_kg, diffuserCv, diffuserXt } = params;
+
+  const evalDiffuserFlow = (P_int: number): { flow_kg_h: number; choked: boolean } => {
+    const st = evaluateSteamPH(P_int, enthalpy_kJ_kg);
+    const Fgamma = Math.max(0.5, st.gammaCpCv / 1.4);
+    const x = Math.max(0, (P_int - P_final_bar_a) / Math.max(0.05, P_int));
+    const x_choked = Fgamma * Math.max(0.15, diffuserXt);
+    const choked = x >= x_choked;
+    const x_eff = Math.min(x, x_choked);
+    const Y = Math.max(0.667, 1.0 - x_eff / (3.0 * x_choked));
+    const flow_kg_h = 27.3 * diffuserCv * Y * Math.sqrt(Math.max(1e-6, x_eff * P_int * st.rho_kg_m3));
+    return { flow_kg_h, choked };
+  };
+
+  const maxCheck = evalDiffuserFlow(P1_bar_a);
+  if (maxCheck.flow_kg_h <= massFlow_kg_h) {
+    // Diffuser is too small to pass the required flow even at P1
+    return {
+      P_int_bar_a: Math.max(P_final_bar_a + 0.05, P1_bar_a * 0.95),
+      diffuserChoked: maxCheck.choked,
+      bottlenecked: true,
+    };
+  }
+
+  let lo = P_final_bar_a + 0.005;
+  let hi = P1_bar_a;
+  let choked = false;
+  for (let i = 0; i < 28; i++) {
+    const mid = 0.5 * (lo + hi);
+    const res = evalDiffuserFlow(mid);
+    choked = res.choked;
+    if (Math.abs(res.flow_kg_h - massFlow_kg_h) < Math.max(0.5, 1e-4 * massFlow_kg_h)) {
+      return { P_int_bar_a: mid, diffuserChoked: choked, bottlenecked: false };
+    }
+    if (res.flow_kg_h < massFlow_kg_h) lo = mid;
+    else hi = mid;
+  }
+  return { P_int_bar_a: 0.5 * (lo + hi), diffuserChoked: choked, bottlenecked: false };
 }
 
 /**
@@ -515,9 +617,47 @@ export function evaluateOperatingCase(params: {
   const strokeMm = params.stroke_mm || Math.max(19, seatPort_mm * 0.5);
 
   const P1 = Math.max(0.1, point.P1_bar_a);
-  const P2 = Math.max(0.05, Math.min(P1 - 0.01, point.P2_bar_a));
-  const deltaP = Math.max(0.01, P1 - P2);
+  const P2_final = Math.max(0.05, Math.min(P1 - 0.01, point.P2_bar_a));
   const T1_K = Math.max(50, point.T1_degC + 273.15);
+
+  const steamProps =
+    point.fluidPhase === 'STEAM'
+      ? computeSteamSaturationProperties(P1, point.T1_degC)
+      : {
+          Tsat_degC: 0,
+          superheat_degC: 0,
+          FSH: 1.0,
+          Z_steam: point.compressibilityZ,
+          rho_steam: 1,
+          gamma_steam: point.gammaCpCv,
+          enthalpy_kJ_kg: 0,
+          speedOfSound_m_s: 500,
+        };
+
+  // Downstream Diffuser / Dump-Tube Backpressure Split (Steam PRDS / Turbine Bypass)
+  let P2 = P2_final;
+  let diffuserChoked = false;
+  let diffuserBottleneckWarning = false;
+  if (
+    point.fluidPhase === 'STEAM' &&
+    piping.downstreamDiffuserEnabled &&
+    (piping.diffuserCv ?? 0) > 0
+  ) {
+    const diffSplit = solveDiffuserIntermediatePressure({
+      P1_bar_a: P1,
+      P_final_bar_a: P2_final,
+      massFlow_kg_h: point.flowRate,
+      enthalpy_kJ_kg: steamProps.enthalpy_kJ_kg,
+      diffuserCv: piping.diffuserCv ?? 100,
+      diffuserXt: piping.diffuserXt ?? 0.65,
+    });
+    P2 = Math.max(P2_final, Math.min(P1 - 0.01, diffSplit.P_int_bar_a));
+    diffuserChoked = diffSplit.diffuserChoked;
+    diffuserBottleneckWarning = diffSplit.bottlenecked;
+  }
+
+  const deltaP = Math.max(0.01, P1 - P2);
+  const diffuserDeltaP_bar = Math.max(0, P2 - P2_final);
 
   // 1. Swaged Piping Resistance Coefficients (IEC 60534-2-1 / Emerson Ch. 5.8.1)
   const d_D1_sq = Math.pow(d_mm / D1_mm, 2);
@@ -533,11 +673,6 @@ export function evaluateOperatingCase(params: {
   // N1 = 0.865 (Cv, m3/h, bar), N2 = 0.00214 (Cv, mm), N5 = 0.00241 (Cv, mm), N6 = 27.3 (Cv, kg/h, bar), N9 = 2120 (Cv, Nm3/h, bar)
   const N2_mm = 0.00214;
   const N5_mm = 0.00241;
-
-  const steamProps =
-    point.fluidPhase === 'STEAM'
-      ? computeSteamSaturationProperties(P1, point.T1_degC)
-      : { Tsat_degC: 0, superheat_degC: 0, FSH: 1.0, Z_steam: point.compressibilityZ, rho_steam: 1 };
 
   const multistageFactorFM =
     point.fluidPhase !== 'LIQUID' && stages >= 2 ? (stages === 2 ? 0.74 : 0.62) : 1.0;
@@ -618,7 +753,7 @@ export function evaluateOperatingCase(params: {
         Math.sqrt(x_eff / Math.max(1, point.molecularWeight * T1_K * point.compressibilityZ));
       estCv = point.flowRate / Math.max(1e-4, denom);
     } else if (point.fluidPhase === 'STEAM') {
-      const Fgamma = Math.max(0.5, point.gammaCpCv / 1.40);
+      const Fgamma = Math.max(0.5, steamProps.gamma_steam / 1.40);
       const x = deltaP / P1;
       const x_choked = Fgamma * xTP;
       const x_eff = Math.min(x, x_choked);
@@ -841,7 +976,8 @@ export function evaluateOperatingCase(params: {
     regimeSeverity = isChoked || P2 <= point.Pv_bar_a ? 'WARNING' : 'PASS';
   } else {
     // GAS or STEAM
-    const Fgamma = Math.max(0.5, point.gammaCpCv / 1.40);
+    const gammaEff = point.fluidPhase === 'STEAM' ? steamProps.gamma_steam : point.gammaCpCv;
+    const Fgamma = Math.max(0.5, gammaEff / 1.40);
     const x = deltaP / P1;
     const x_choked = Fgamma * xTP;
     isChoked = x >= x_choked;
@@ -894,6 +1030,57 @@ export function evaluateOperatingCase(params: {
   let waterHammerSurfacePressure_MPa = 0;
   let fluidSoundSpeed_m_s = Math.max(300, point.speedOfSound_m_s);
 
+  let steamThrottledOutletTemp_degC = point.T1_degC;
+  let steamOutletQuality = point.fluidPhase === 'LIQUID' ? 0 : 1.0;
+  let sprayWaterFlow_kg_h = 0;
+  let totalOutletMassFlow_kg_h = point.flowRate;
+  let sprayRequiredCv = 0;
+  let outletTempAfterSpray_degC = point.T1_degC;
+  let superheatMargin_degC = steamProps.superheat_degC;
+  let sprayWaterWarning: string | null = null;
+
+  if (point.fluidPhase === 'STEAM') {
+    const throttledState = evaluateSteamPH(P2, steamProps.enthalpy_kJ_kg);
+    steamThrottledOutletTemp_degC = throttledState.T_degC;
+    steamOutletQuality = throttledState.vaporQuality;
+    outletTempAfterSpray_degC = throttledState.T_degC;
+    superheatMargin_degC = throttledState.superheat_degC;
+
+    if (piping.desuperheaterEnabled) {
+      const P_spray = piping.sprayWaterPressure_bar_a ?? Math.max(P2_final + 10, P1 * 0.5);
+      const T_spray = piping.sprayWaterTemp_degC ?? 105;
+      const T_target = piping.targetDownstreamTemp_degC ?? Math.max(throttledState.Tsat_degC + 15, 220);
+
+      const sprayState = evaluateSteamPT(P_spray, T_spray);
+      const targetOutState = evaluateSteamPT(P2_final, T_target);
+      const h_in = steamProps.enthalpy_kJ_kg;
+      const h_spray = sprayState.enthalpy_kJ_kg;
+      const h_out = targetOutState.enthalpy_kJ_kg;
+
+      if (h_out < h_in && h_out > h_spray + 10) {
+        sprayWaterFlow_kg_h = Math.max(0, point.flowRate * ((h_in - h_out) / (h_out - h_spray)));
+        totalOutletMassFlow_kg_h = point.flowRate + sprayWaterFlow_kg_h;
+        outletTempAfterSpray_degC = targetOutState.T_degC;
+        superheatMargin_degC = targetOutState.superheat_degC;
+
+        const dP_spray = P_spray - P2_final;
+        if (dP_spray <= 1.0) {
+          sprayWaterWarning = `Low spray ΔP (${dP_spray.toFixed(1)} bar) — increase spray water supply pressure above ${P2_final.toFixed(1)} bar a.`;
+        } else {
+          const Gf_spray = Math.max(0.5, sprayState.rho_kg_m3 / 999.0);
+          const Q_spray_m3_h = sprayWaterFlow_kg_h / Math.max(200, sprayState.rho_kg_m3);
+          sprayRequiredCv = Q_spray_m3_h / (0.865 * Math.sqrt(dP_spray / Gf_spray));
+        }
+
+        if (superheatMargin_degC < 10) {
+          sprayWaterWarning = `Low superheat margin (${superheatMargin_degC.toFixed(1)} °C < 10 °C) — risk of wet-steam impingement.`;
+        }
+      } else {
+        sprayWaterWarning = 'Target outlet temperature is above throttled steam temperature; zero spray required.';
+      }
+    }
+  }
+
   if (point.fluidPhase === 'LIQUID') {
     const Q_m3_s = point.flowRate / 3600;
     bodyVelocity_m_s = Q_m3_s / bodyArea_m2;
@@ -932,16 +1119,25 @@ export function evaluateOperatingCase(params: {
   } else {
     // Compressible or Two-Phase mass flow rate m_dot (kg/s)
     const Z_eff = point.fluidPhase === 'STEAM' ? steamProps.Z_steam : point.compressibilityZ;
+    const gamma_eff = point.fluidPhase === 'STEAM' ? steamProps.gamma_steam : point.gammaCpCv;
     const rhoStd = point.molecularWeight / 22.414;
     const m_dot_kg_s =
       point.fluidPhase === 'GAS'
         ? (point.flowRate * rhoStd) / 3600
         : point.flowRate / 3600;
+    const m_dot_pipe_kg_s =
+      point.fluidPhase === 'STEAM' ? totalOutletMassFlow_kg_h / 3600 : m_dot_kg_s;
 
     const R_specific = 8314.46 / Math.max(2, point.molecularWeight);
-    const sonicSpeed_m_s = Math.sqrt(point.gammaCpCv * R_specific * T1_K * Z_eff);
+    const sonicSpeed_m_s =
+      point.fluidPhase === 'STEAM'
+        ? steamProps.speedOfSound_m_s
+        : Math.sqrt(gamma_eff * R_specific * T1_K * Z_eff);
     fluidSoundSpeed_m_s = sonicSpeed_m_s;
-    const rhoGasDown = (P2 * 1e5) / Math.max(1, R_specific * T1_K * Z_eff);
+    const rhoGasDown =
+      point.fluidPhase === 'STEAM'
+        ? evaluateSteamPT(P2, outletTempAfterSpray_degC).rho_kg_m3
+        : (P2 * 1e5) / Math.max(1, R_specific * T1_K * Z_eff);
 
     let rhoDownstream = rhoGasDown;
     if (point.fluidPhase === 'TWO_PHASE') {
@@ -950,11 +1146,21 @@ export function evaluateOperatingCase(params: {
       rhoDownstream = 1 / Math.max(1e-4, mixSpVolDown);
     }
 
+    const rhoPipeDown =
+      point.fluidPhase === 'STEAM'
+        ? evaluateSteamPT(P2_final, outletTempAfterSpray_degC).rho_kg_m3
+        : rhoDownstream;
+    const pipeSonic_m_s =
+      point.fluidPhase === 'STEAM'
+        ? evaluateSteamPT(P2_final, outletTempAfterSpray_degC).speedOfSound_m_s
+        : sonicSpeed_m_s;
+
     const Q_actual_down_m3_s = m_dot_kg_s / Math.max(0.05, rhoDownstream);
+    const Q_pipe_down_m3_s = m_dot_pipe_kg_s / Math.max(0.05, rhoPipeDown);
     bodyVelocity_m_s = Q_actual_down_m3_s / bodyArea_m2;
-    const pipeVelDown_m_s = Q_actual_down_m3_s / pipeDownArea_m2;
+    const pipeVelDown_m_s = Q_pipe_down_m3_s / pipeDownArea_m2;
     outletMach = bodyVelocity_m_s / sonicSpeed_m_s;
-    pipeMach = pipeVelDown_m_s / sonicSpeed_m_s;
+    pipeMach = pipeVelDown_m_s / pipeSonic_m_s;
     trimExitVelocity_m_s = Math.min(
       sonicSpeed_m_s,
       Q_actual_down_m3_s / Math.max(1e-5, trimCurtainArea_m2)
@@ -1092,6 +1298,25 @@ export function evaluateOperatingCase(params: {
   }
 
   const noiseAttenuation_dBA = Math.max(0, noiseStandardTrim_dBA - noiseDrilledCage_dBA);
+
+  // Downstream diffuser acoustic contribution & combined PRDS bypass noise
+  let diffuserNoise_dBA = 0;
+  let combinedBypassNoise_dBA = noiseDrilledCage_dBA;
+  if (point.fluidPhase === 'STEAM' && piping.downstreamDiffuserEnabled && diffuserDeltaP_bar > 0.05) {
+    const m_dot_diff_kg_s = totalOutletMassFlow_kg_h / 3600;
+    const x_diff = diffuserDeltaP_bar / Math.max(0.1, P2);
+    const t_p_m = Math.max(0.003, piping.pipeWallThickness_mm / 1000);
+    const TL_diff = 42 + 12 * Math.log10((t_p_m * 1000) / Math.max(15, D2_mm));
+    const Wm_diff = 0.5 * m_dot_diff_kg_s * Math.pow(fluidSoundSpeed_m_s * Math.min(1, Math.sqrt(x_diff)), 2);
+    const eta_diff = Math.min(0.005, 8e-5 * Math.pow(Math.max(0.2, x_diff), 1.8));
+    diffuserNoise_dBA = Math.min(
+      115,
+      Math.max(45, 10 * Math.log10(Math.max(1e-12, Wm_diff * eta_diff) / 1e-12) - TL_diff)
+    );
+    combinedBypassNoise_dBA =
+      10 * Math.log10(Math.pow(10, noiseDrilledCage_dBA / 10) + Math.pow(10, diffuserNoise_dBA / 10));
+  }
+
   const noiseStatus: 'PASS' | 'WARNING' | 'CRITICAL' =
     noiseDrilledCage_dBA <= 82
       ? 'PASS'
@@ -1240,6 +1465,21 @@ export function evaluateOperatingCase(params: {
     ftoWallImpingementWarning,
     flowDirectionRecommendation,
     multiphaseQuadrantMaldistributionPct: Number(multiphaseQuadrantMaldistributionPct.toFixed(1)),
+    steamInletEnthalpy_kJ_kg: Number(steamProps.enthalpy_kJ_kg.toFixed(1)),
+    steamThrottledOutletTemp_degC: Number(steamThrottledOutletTemp_degC.toFixed(1)),
+    steamOutletQuality: Number(steamOutletQuality.toFixed(3)),
+    sprayWaterFlow_kg_h: Number(sprayWaterFlow_kg_h.toFixed(1)),
+    totalOutletMassFlow_kg_h: Number(totalOutletMassFlow_kg_h.toFixed(1)),
+    sprayRequiredCv: Number(sprayRequiredCv.toFixed(2)),
+    outletTempAfterSpray_degC: Number(outletTempAfterSpray_degC.toFixed(1)),
+    superheatMargin_degC: Number(superheatMargin_degC.toFixed(1)),
+    sprayWaterWarning,
+    intermediatePressure_bar_a: Number(P2.toFixed(2)),
+    diffuserDeltaP_bar: Number(diffuserDeltaP_bar.toFixed(2)),
+    diffuserChoked,
+    diffuserNoise_dBA: Number(diffuserNoise_dBA.toFixed(1)),
+    combinedBypassNoise_dBA: Number(combinedBypassNoise_dBA.toFixed(1)),
+    diffuserBottleneckWarning,
   };
 }
 

@@ -126,7 +126,7 @@ import {
 
 // Application revision displayed in the header title bar & browser tab.
 // Increment by +0.0.1 on every subsequent code change/push (next: 1.0.7) unless minor/major escalation is requested.
-export const APP_VERSION = '1.0.6';
+export const APP_VERSION = '1.0.7';
 
 type ActiveTabId =
   | 'PROCESS_SIZING'
@@ -246,6 +246,13 @@ export default function App() {
     upstreamPipeLength_m: 85,
     actuatorCloseTime_s: 3.5,
     bodyMaterialCategory: 'STAINLESS_ALLOY',
+    desuperheaterEnabled: false,
+    sprayWaterTemp_degC: 105,
+    sprayWaterPressure_bar_a: 60,
+    targetDownstreamTemp_degC: 240,
+    downstreamDiffuserEnabled: false,
+    diffuserCv: 450,
+    diffuserXt: 0.65,
   });
 
   const [operatingCases, setOperatingCases] = useState<OperatingPointInput[]>([
@@ -2374,6 +2381,126 @@ export default function App() {
                     )}
                   </div>
                 </div>
+
+                {/* Steam Turbine Bypass / PRDS Options (Desuperheater & Downstream Diffuser) */}
+                {operatingCases.some((c) => c.enabled && c.fluidPhase === 'STEAM') && (
+                  <div className="pt-4 border-t border-[#e2e8f0] grid grid-cols-1 lg:grid-cols-2 gap-4">
+                    <div className="bg-[#f8fafc] border border-[#cfd8e3] rounded-lg p-3 space-y-2.5">
+                      <label className="flex items-center justify-between text-xs font-mono font-semibold text-[#0b2545] cursor-pointer">
+                        <span>PRDS Desuperheater / Spray-Water Attemperation</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(piping.desuperheaterEnabled)}
+                          onChange={(e) =>
+                            setPiping({ ...piping, desuperheaterEnabled: e.target.checked })
+                          }
+                          className="accent-[#0f8b8d]"
+                        />
+                      </label>
+                      {piping.desuperheaterEnabled && (
+                        <div className="grid grid-cols-3 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-mono text-slate-600 mb-0.5">
+                              Spray Temp (°C)
+                            </label>
+                            <input
+                              type="number"
+                              step="5"
+                              value={piping.sprayWaterTemp_degC ?? 105}
+                              onChange={(e) =>
+                                setPiping({ ...piping, sprayWaterTemp_degC: Number(e.target.value) })
+                              }
+                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-mono text-slate-600 mb-0.5">
+                              Spray Press (bar a)
+                            </label>
+                            <input
+                              type="number"
+                              step="1"
+                              value={piping.sprayWaterPressure_bar_a ?? 60}
+                              onChange={(e) =>
+                                setPiping({
+                                  ...piping,
+                                  sprayWaterPressure_bar_a: Number(e.target.value),
+                                })
+                              }
+                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-mono text-slate-600 mb-0.5">
+                              Target Out (°C)
+                            </label>
+                            <input
+                              type="number"
+                              step="5"
+                              value={piping.targetDownstreamTemp_degC ?? 240}
+                              onChange={(e) =>
+                                setPiping({
+                                  ...piping,
+                                  targetDownstreamTemp_degC: Number(e.target.value),
+                                })
+                              }
+                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545]"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+
+                    <div className="bg-[#f8fafc] border border-[#cfd8e3] rounded-lg p-3 space-y-2.5">
+                      <label className="flex items-center justify-between text-xs font-mono font-semibold text-[#0b2545] cursor-pointer">
+                        <span>Downstream Diffuser / Condenser Sparger Split</span>
+                        <input
+                          type="checkbox"
+                          checked={Boolean(piping.downstreamDiffuserEnabled)}
+                          onChange={(e) =>
+                            setPiping({ ...piping, downstreamDiffuserEnabled: e.target.checked })
+                          }
+                          className="accent-[#0f8b8d]"
+                        />
+                      </label>
+                      {piping.downstreamDiffuserEnabled && (
+                        <div className="grid grid-cols-2 gap-2">
+                          <div>
+                            <label className="block text-[10px] font-mono text-slate-600 mb-0.5">
+                              Diffuser Rated Cv
+                            </label>
+                            <input
+                              type="number"
+                              step="10"
+                              min="1"
+                              value={piping.diffuserCv ?? 450}
+                              onChange={(e) =>
+                                setPiping({ ...piping, diffuserCv: Number(e.target.value) })
+                              }
+                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545]"
+                            />
+                          </div>
+                          <div>
+                            <label className="block text-[10px] font-mono text-slate-600 mb-0.5">
+                              Diffuser Choked xT
+                            </label>
+                            <input
+                              type="number"
+                              step="0.05"
+                              min="0.15"
+                              max="0.9"
+                              value={piping.diffuserXt ?? 0.65}
+                              onChange={(e) =>
+                                setPiping({ ...piping, diffuserXt: Number(e.target.value) })
+                              }
+                              className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545]"
+                            />
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
               </div>
             </div>
 
@@ -3869,6 +3996,61 @@ export default function App() {
                     </tbody>
                   </table>
                 </div>
+
+                {/* Steam Turbine Bypass / PRDS IAPWS-IF97 Summary Strip */}
+                {caseResults.some((r) => r.fluidPhase === 'STEAM') && (
+                  <div className="bg-[#f0f7fa] border border-[#b9d9e2] rounded-xl p-3.5 text-xs font-mono space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="font-bold text-[#0b2545] uppercase tracking-wide text-[11px]">
+                        IAPWS-IF97 Steam Throttling, PRDS Attemperation & Diffuser Split
+                      </span>
+                      <span className="text-[11px] text-[#0f8b8d] font-semibold">
+                        Regions 1–4 Active (Subcritical & Supercritical)
+                      </span>
+                    </div>
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2.5">
+                      {caseResults
+                        .filter((r) => r.fluidPhase === 'STEAM')
+                        .map((r) => (
+                          <div
+                            key={`steam-${r.id}`}
+                            className="bg-white border border-[#cfd8e3] rounded-lg p-2.5 space-y-1"
+                          >
+                            <div className="flex items-center justify-between font-bold text-[#0b2545]">
+                              <span>{r.label}</span>
+                              <span className="text-[#0f8b8d]">h₁={r.steamInletEnthalpy_kJ_kg} kJ/kg</span>
+                            </div>
+                            <div className="text-slate-600">
+                              Throttled T₂: <strong className="text-[#0b2545]">{r.steamThrottledOutletTemp_degC} °C</strong>
+                              {r.steamOutletQuality < 1 && (
+                                <span className="text-amber-700 ml-1">
+                                  (Wet x={r.steamOutletQuality})
+                                </span>
+                              )}
+                            </div>
+                            {piping.desuperheaterEnabled && (
+                              <div className="text-slate-600">
+                                Spray: <strong className="text-[#0b2545]">{r.sprayWaterFlow_kg_h} kg/h</strong> (Cv {r.sprayRequiredCv}) → Out{' '}
+                                <strong className="text-[#0b2545]">{r.outletTempAfterSpray_degC} °C</strong> (SH +{r.superheatMargin_degC} °C)
+                              </div>
+                            )}
+                            {piping.downstreamDiffuserEnabled && (
+                              <div className="text-slate-600">
+                                P_int: <strong className="text-[#0b2545]">{r.intermediatePressure_bar_a} bar a</strong> | Diff ΔP{' '}
+                                {r.diffuserDeltaP_bar} bar | Combined{' '}
+                                <strong className="text-[#0b2545]">{r.combinedBypassNoise_dBA} dBA</strong>
+                              </div>
+                            )}
+                            {(r.sprayWaterWarning || r.diffuserBottleneckWarning) && (
+                              <div className="text-amber-700 text-[11px] font-semibold">
+                                {r.sprayWaterWarning || 'Diffuser Cv bottlenecked: P_int approaches P1.'}
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                    </div>
+                  </div>
+                )}
 
                 {/* Water-Hammer, Thiruvengadam Erosion, Coincidence/Expander & Low-Freq Pulsation Telemetry */}
                 {caseResults.length > 0 && (
