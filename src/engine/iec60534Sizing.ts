@@ -1,5 +1,5 @@
 import { evaluateStrokeDependentRecovery } from './valveSchedule.ts';
-import type { FlowDirectionId } from './valveSchedule.ts';
+import type { BodyStyleId, FlowDirectionId, TrimStyleId } from './valveSchedule.ts';
 import { evaluateSteamPT, evaluateSteamPH } from './iapwsIf97.ts';
 
 export type FluidPhase = 'LIQUID' | 'GAS' | 'STEAM' | 'TWO_PHASE';
@@ -589,6 +589,8 @@ export function evaluateOperatingCase(params: {
   characteristicType: string;
   equalPctRangeability: number;
   flowDirection?: FlowDirectionId;
+  bodyStyle?: BodyStyleId;
+  trimStyle?: TrimStyleId;
   cageMaterialId?: string;
   methodologyMode?: 'CONVENTIONAL_1D' | 'ADVANCED_LOCAL_3D';
   compensateGalleryAsymmetry?: boolean;
@@ -684,6 +686,7 @@ export function evaluateOperatingCase(params: {
   let FL_atTravel = FL;
   let Kc_atTravel = Kc;
   let xT_atTravel = xT;
+  let Kie_atTravel = 0.85;
   let twoPhaseModelUsed = 'N/A';
 
   for (let iter = 0; iter < 5; iter++) {
@@ -700,10 +703,13 @@ export function evaluateOperatingCase(params: {
       travelPct: estTravel,
       stages,
       flowDirection: flowDir,
+      bodyStyle: params.bodyStyle,
+      trimStyle: params.trimStyle,
     });
     FL_atTravel = strokeRecovery.FL_atTravel;
     Kc_atTravel = strokeRecovery.Kc_atTravel;
     xT_atTravel = strokeRecovery.xT_atTravel;
+    Kie_atTravel = strokeRecovery.Kie;
 
     const cv_d2 = estCv / (d_mm * d_mm);
     const cv_d2_sq = cv_d2 * cv_d2;
@@ -896,19 +902,16 @@ export function evaluateOperatingCase(params: {
       )
     );
     xFZ = Math.min(0.96, xFZ * Math.pow(stageMultiplier, 0.35));
-    Kc_effective = Math.min(0.98, 1 - (1 - Kc_atTravel) / stageMultiplier);
+    // Severn Glocon SG10 (Pages 38–41): Kc = Kie * FL^2 and sigma_mr = 1 / (Kie * FLP^2)
+    Kc_effective = Math.min(0.98, Math.max(0.15, Kc_atTravel));
 
     sigmaIncipient_i = 1 / Math.max(0.12, xFZ);
-    sigmaConstant_c = 1 / Math.max(0.15, Kc_effective);
-    sigmaMaxVibration_mv = 1.05 / Math.max(0.15, FLP * FLP);
-    const matBonus = Math.min(0.18, Math.log10(Math.max(1, materialCavitationIndex)) * 0.12);
-    sigmaRecommended_mr =
-      stages >= 2
-        ? Math.max(1.04, (sigmaMaxVibration_mv * (1 - matBonus)) / Math.pow(stages, 0.35))
-        : Math.max(
-            1.08,
-            (0.55 * sigmaConstant_c + 0.45 * sigmaMaxVibration_mv) * (1 - 0.5 * matBonus)
-          );
+    sigmaConstant_c = 1 / Math.max(0.10, Kc_effective);
+    sigmaMaxVibration_mv = 1.05 / Math.max(0.10, FLP * FLP);
+    sigmaRecommended_mr = Math.max(
+      1.04,
+      1.0 / Math.max(0.10, Kie_atTravel * FLP * FLP)
+    );
 
     const dP_ratio = deltaP / Math.max(0.01, P1 - point.Pv_bar_a);
 

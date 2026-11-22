@@ -146,6 +146,8 @@ export function recommendValveSizeAndRating(params: {
         equalPctRangeability: params.equalPctRangeability || 50,
         stroke_mm: valve.stroke_mm,
         flowDirection: params.flowDirection,
+        bodyStyle: params.bodyStyle,
+        trimStyle: params.trimStyle,
       })
     );
 
@@ -256,7 +258,7 @@ export function recommendValveSizeAndRating(params: {
     `Step 3 (Size & Rating, 60–90% Rule): Selected ${PRESSURE_CLASSES[selectedClass].label}, DN${best.dn} (${best.nps}) with rated Cv = ${best.ratedCv} (Cv_max is ${best.maxPct.toFixed(1)}% of rated capacity${best.maxPct < 60 ? ' — <60% due to standard DN step; reduced trim optional' : ''}).`,
     `Step 4 (% Open on ${params.characteristicType || 'LINEAR'}): Operating travel spans ${best.minTravelPct.toFixed(1)}% to ${best.maxTravelPct.toFixed(1)}% open (turndown ${(best.maxCv / Math.max(0.1, best.minCv)).toFixed(1)}:1).`,
     `Sibanda (2022) Ch. 6 Least-Cost Life-Cycle (${lifeCycleYears}-yr Mfg + Pumping Energy): Selected DN${best.dn} = £${best.sibandaTotalLifeCycleCost_GBP.toLocaleString()} (Mfg £${best.sibandaManufacturingCost_GBP.toLocaleString()} + Op £${best.sibandaOperatingEnergyCost_GBP.toLocaleString()}); Economic Minimum = DN${leastCostCandidate.dn} (£${leastCostCandidate.sibandaTotalLifeCycleCost_GBP.toLocaleString()}).`,
-    `Warren Table 1 True Rangeability Check (Cv_rated / R = ${best.ratedCv} / ${effectiveR}): ${warrenRangeabilityNote}`,
+    `True Rangeability Check (Cv_rated / R = ${best.ratedCv} / ${effectiveR}): ${warrenRangeabilityNote}`,
   ];
 
   return {

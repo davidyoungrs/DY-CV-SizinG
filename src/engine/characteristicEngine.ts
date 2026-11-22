@@ -276,10 +276,10 @@ export function simulateCharacteristicCurves(params: {
   }
 
   if (nelesSafetyFactorTrapWarning) {
-    recommendedCharacteristicNote += ` Neles Alert: Inherent utilization is ${(phiMaxOp * 100).toFixed(0)}%, yet installed headroom is only ${nelesInstalledHeadroomPct}% at Pv = ${Pv.toFixed(2)}.`;
+    recommendedCharacteristicNote += ` Installed Authority Alert: Inherent utilization is ${(phiMaxOp * 100).toFixed(0)}%, yet installed headroom is only ${nelesInstalledHeadroomPct}% at Pv = ${Pv.toFixed(2)}.`;
   }
   if (minOperatingRequiredCv !== undefined && minOperatingRequiredCv < trueMinControllableCv) {
-    recommendedCharacteristicNote += ` Warren Table 1 Alert: Min required Cv (${minOperatingRequiredCv.toFixed(2)}) is below true controllable floor Cv_rated/${effectiveRangeability} (${trueMinControllableCv}).`;
+    recommendedCharacteristicNote += ` Rangeability Alert: Min required Cv (${minOperatingRequiredCv.toFixed(2)}) is below true controllable floor Cv_rated/${effectiveRangeability} (${trueMinControllableCv}).`;
   }
 
   return {

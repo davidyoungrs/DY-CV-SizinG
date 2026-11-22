@@ -126,7 +126,7 @@ import {
 
 // Application revision displayed in the header title bar & browser tab.
 // Increment by +0.0.1 on every subsequent code change/push (next: 1.0.10) unless minor/major escalation is requested.
-export const APP_VERSION = '1.0.10';
+export const APP_VERSION = '1.0.12';
 
 /**
  * Top-layer, viewport-aware tooltip satisfying WCAG 1.4.13 (hoverable, persistent, Escape-dismissible).
@@ -738,6 +738,8 @@ export default function App() {
         equalPctRangeability: effectiveCharConfig.equalPctRangeability,
         stroke_mm: correlatedValve.stroke_mm,
         flowDirection,
+        bodyStyle,
+        trimStyle,
         cageMaterialId: cageMaterial,
         methodologyMode,
         compensateGalleryAsymmetry,
@@ -753,6 +755,8 @@ export default function App() {
     baseHoleDia_mm,
     effectiveCharConfig,
     flowDirection,
+    bodyStyle,
+    trimStyle,
     cageMaterial,
     methodologyMode,
     compensateGalleryAsymmetry,
@@ -841,6 +845,8 @@ export default function App() {
             equalPctRangeability: effectiveCharConfig.equalPctRangeability,
             stroke_mm: correlatedValve.stroke_mm,
             flowDirection,
+            bodyStyle,
+            trimStyle,
             cageMaterialId: cageMaterial,
             methodologyMode,
             compensateGalleryAsymmetry,
@@ -854,6 +860,8 @@ export default function App() {
       effectiveStages,
       effectiveCharConfig,
       flowDirection,
+      bodyStyle,
+      trimStyle,
       cageMaterial,
       methodologyMode,
       compensateGalleryAsymmetry,
@@ -4321,7 +4329,7 @@ export default function App() {
                           }
                         >
                           {caseResults[0]?.lowFreqPulsationRisk
-                            ? 'WARNING (Masoneilan/Parcol): Low H/d_port with FTO/high-ΔP gas risks 10–150 Hz instability; consider FTC or 2-stage cage.'
+                            ? 'WARNING: Low H/d_port with FTO/high-ΔP gas risks 10–150 Hz instability; consider FTC or 2-stage cage.'
                             : 'PASS: Aspect ratio & flow direction keep low-frequency acoustic instability risk minimal.'}
                         </span>
                       </p>
@@ -4340,7 +4348,7 @@ export default function App() {
                   </div>
                   <div>
                     <h2 className="text-sm font-bold text-white flex items-center gap-2 flex-wrap">
-                      Downstream Backpressure Orifice / Diffuser Pressure-Sharing Calculator (Parcol / Masoneilan)
+                      Downstream Backpressure Orifice / Diffuser Pressure-Sharing Calculator
                       {enableBackpressureOrifice && (
                         <span className="px-2 py-0.5 rounded bg-[#0f8b8d] text-white font-mono text-[10px] font-semibold">
                           CLOSED-LOOP P2* ACTIVE IN SIZING
@@ -4747,7 +4755,7 @@ export default function App() {
                       <span className="text-sm font-bold text-[#7fe0e2]">
                         {charSimulation.trueMinControllableCv} Cv
                       </span>
-                      <span className="block text-[9px] text-slate-400">Warren Table 1</span>
+                      <span className="block text-[9px] text-slate-400">Cv_rated / R</span>
                     </div>
                     <div className="instrument-tile p-2 rounded">
                       <span className="block text-[10px] text-slate-400">1% Stiction Swing</span>
@@ -4759,7 +4767,7 @@ export default function App() {
                   </div>
                   {charSimulation.nelesSafetyFactorTrapWarning && (
                     <div className="rounded bg-[#ff8a80]/15 border border-[#ff8a80]/40 px-2.5 py-1.5 text-[11px] font-mono text-[#ff8a80]">
-                      Neles Safety-Factor Trap: Low Pv distorts installed curve — headroom above max required flow is under 10%.
+                      Installed Headroom Alert: Low Pv distorts installed curve — headroom above max required flow is under 10%.
                     </div>
                   )}
                   <p className="text-xs font-mono text-slate-300 leading-relaxed">
@@ -6178,7 +6186,7 @@ export default function App() {
                   <h3 className="text-sm font-bold text-white">
                     {flowDirection === 'FTC'
                       ? 'Sibanda (2022) Ch. 5 FTC Circumferential Cv(θ) Profile'
-                      : 'Masoneilan / Severn FTO Core-to-Gallery Cv(θ) Profile'}
+                      : 'FTO Core-to-Gallery Cv(θ) Profile'}
                   </h3>
                   <p className="text-xs text-slate-300 font-mono">
                     {methodologyMode === 'CONVENTIONAL_1D'
@@ -6944,7 +6952,7 @@ export default function App() {
               <div className="dy-card overflow-hidden">
                 <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-2">
                   <span className="text-xs font-mono uppercase tracking-wider text-white font-semibold">
-                    Bonnet Style & Packing Box Thermal Isolation Advisor (Emerson Ch. 3 & Skousen Ch. 2)
+                    Bonnet Style & Packing Box Thermal Isolation Advisor
                   </span>
                   <span className="px-2.5 py-0.5 rounded bg-[#182028] text-[#ffd77a] border border-[#2f3b47] text-xs font-mono font-bold">
                     Est. Packing Box Temp: {thermalResult.bonnetAdvisor.estimatedPackingBoxTemp_degC} °C
@@ -7655,7 +7663,7 @@ export default function App() {
                       Rotary & Quarter-Turn Control Valve Benchmark Reference (DN{selectedDN} / {PRESSURE_CLASSES[pressureClass].label})
                     </h2>
                     <p className="text-xs text-slate-300 font-mono">
-                      Typical wide-open specific capacity Cd = Cv/d² and low-recovery factors vs linear globe/cage valves (Warren / Baumann Ch. 5 / Neles)
+                      Typical wide-open specific capacity Cd = Cv/d² and low-recovery factors vs linear globe/cage valves
                     </p>
                   </div>
                 </div>

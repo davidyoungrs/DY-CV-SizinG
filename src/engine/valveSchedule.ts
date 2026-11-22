@@ -110,16 +110,16 @@ export const TRIM_STYLES: Record<TrimStyleId, TrimStyleSpec> = {
     shortName: 'Contoured Linear',
     stages: 1,
     cdSpecificCapacity: 16.0,
-    FL_FTO: 0.89,
-    FL_FTC: 0.82,
-    Kc_FTO: 0.78,
-    Kc_FTC: 0.68,
-    xT_FTO: 0.72,
-    xT_FTC: 0.65,
+    FL_FTO: 0.90,
+    FL_FTC: 0.85,
+    Kc_FTO: 0.65,
+    Kc_FTC: 0.59,
+    xT_FTO: 0.75,
+    xT_FTC: 0.70,
     Fd_default: 0.46,
     openAreaRatioEta: 0.70,
     orificeDischargeCoeff: 0.76,
-    description: 'High-capacity single-seated parabolic contoured plug for clean service.',
+    description: 'High-capacity single-seated parabolic contoured plug for clean service (Globe / Angle Contoured).',
   },
   CONTOURED_EQP: {
     id: 'CONTOURED_EQP',
@@ -128,15 +128,15 @@ export const TRIM_STYLES: Record<TrimStyleId, TrimStyleSpec> = {
     stages: 1,
     cdSpecificCapacity: 14.0,
     FL_FTO: 0.90,
-    FL_FTC: 0.84,
-    Kc_FTO: 0.80,
-    Kc_FTC: 0.70,
-    xT_FTO: 0.74,
-    xT_FTC: 0.67,
+    FL_FTC: 0.85,
+    Kc_FTO: 0.65,
+    Kc_FTC: 0.59,
+    xT_FTO: 0.75,
+    xT_FTC: 0.70,
     Fd_default: 0.46,
     openAreaRatioEta: 0.65,
     orificeDischargeCoeff: 0.74,
-    description: 'Standard equal-percentage contoured plug for wide rangeability process loops.',
+    description: 'Standard equal-percentage contoured plug for wide rangeability process loops (Globe / Angle Contoured).',
   },
   WINDOW_CAGE: {
     id: 'WINDOW_CAGE',
@@ -145,15 +145,15 @@ export const TRIM_STYLES: Record<TrimStyleId, TrimStyleSpec> = {
     stages: 1,
     cdSpecificCapacity: 15.0,
     FL_FTO: 0.88,
-    FL_FTC: 0.86,
-    Kc_FTO: 0.75,
-    Kc_FTC: 0.73,
-    xT_FTO: 0.70,
-    xT_FTC: 0.68,
+    FL_FTC: 0.88,
+    Kc_FTO: 0.70,
+    Kc_FTC: 0.70,
+    xT_FTO: 0.79,
+    xT_FTC: 0.79,
     Fd_default: 0.35,
     openAreaRatioEta: 0.60,
     orificeDischargeCoeff: 0.72,
-    description: 'Heavy cage-guided window trim with 3–6 profiled ports.',
+    description: 'Heavy cage-guided window trim with 3–6 profiled ports (Globe / Angle Ported Cage).',
   },
   CAGE_1STAGE: {
     id: 'CAGE_1STAGE',
@@ -161,16 +161,16 @@ export const TRIM_STYLES: Record<TrimStyleId, TrimStyleSpec> = {
     shortName: '1-Stage Drilled Cage',
     stages: 1,
     cdSpecificCapacity: 11.5,
-    FL_FTO: 0.91,
-    FL_FTC: 0.93,
-    Kc_FTO: 0.83,
-    Kc_FTC: 0.86,
-    xT_FTO: 0.76,
-    xT_FTC: 0.78,
+    FL_FTO: 0.94,
+    FL_FTC: 0.94,
+    Kc_FTO: 0.84,
+    Kc_FTC: 0.84,
+    xT_FTO: 0.88,
+    xT_FTC: 0.88,
     Fd_default: 0.10,
     openAreaRatioEta: 0.40,
     orificeDischargeCoeff: 0.68,
-    description: 'Multi-hole radial drilled sleeve for acoustic frequency shifting (FTO) and anti-cavitation central jet impingement (FTC).',
+    description: 'Multi-hole radial drilled sleeve for acoustic frequency shifting (FTO) and anti-cavitation central jet impingement (FTC) (1-Stage Cage).',
   },
   CAGE_2STAGE: {
     id: 'CAGE_2STAGE',
@@ -179,15 +179,15 @@ export const TRIM_STYLES: Record<TrimStyleId, TrimStyleSpec> = {
     stages: 2,
     cdSpecificCapacity: 8.0,
     FL_FTO: 0.95,
-    FL_FTC: 0.96,
-    Kc_FTO: 0.91,
-    Kc_FTC: 0.93,
-    xT_FTO: 0.83,
-    xT_FTC: 0.85,
+    FL_FTC: 0.95,
+    Kc_FTO: 0.86,
+    Kc_FTC: 0.86,
+    xT_FTO: 0.90,
+    xT_FTC: 0.90,
     Fd_default: 0.07,
     openAreaRatioEta: 0.32,
     orificeDischargeCoeff: 0.64,
-    description: 'Double concentric drilled sleeves splitting pressure drop across two radial expansion stages.',
+    description: 'Double concentric drilled sleeves splitting pressure drop across two radial expansion stages (2-Stage Cage).',
   },
   CAGE_3STAGE: {
     id: 'CAGE_3STAGE',
@@ -195,16 +195,16 @@ export const TRIM_STYLES: Record<TrimStyleId, TrimStyleSpec> = {
     shortName: '3-Stage / Tortuous',
     stages: 3,
     cdSpecificCapacity: 5.0,
-    FL_FTO: 0.98,
-    FL_FTC: 0.98,
-    Kc_FTO: 0.96,
-    Kc_FTC: 0.97,
-    xT_FTO: 0.89,
-    xT_FTC: 0.91,
+    FL_FTO: 0.96,
+    FL_FTC: 0.96,
+    Kc_FTO: 0.88,
+    Kc_FTC: 0.88,
+    xT_FTO: 0.92,
+    xT_FTC: 0.92,
     Fd_default: 0.04,
     openAreaRatioEta: 0.24,
     orificeDischargeCoeff: 0.60,
-    description: 'Severe-service 3-stage concentric cage or multi-turn labyrinth disk stack for extreme pressure letdown.',
+    description: 'Severe-service 3-stage concentric cage or multi-turn labyrinth disk stack for extreme pressure letdown (3+ Stage Cage).',
   },
 };
 
@@ -866,19 +866,24 @@ export function computeCorrelatedValveParameters(params: {
 
   const effectiveCd = Number((ratedCv / (sizeSpec.d_in * sizeSpec.d_in)).toFixed(2));
 
+  const sg10Curve = getSg10RecoveryCurve(
+    params.bodyStyle,
+    params.trimStyle,
+    params.flowDirection,
+    trimSpec.stages
+  );
+  const sg10FL100 = sg10Curve.FL[9];
+  const sg10XT100 = sg10Curve.xT[9];
+
   const FL =
     params.customFLOverride && params.customFLOverride > 0
       ? Math.min(0.99, Math.max(0.2, params.customFLOverride))
-      : params.flowDirection === 'FTO'
-      ? trimSpec.FL_FTO
-      : trimSpec.FL_FTC;
-  const Kc = params.flowDirection === 'FTO' ? trimSpec.Kc_FTO : trimSpec.Kc_FTC;
+      : sg10FL100;
+  const Kc = Number(Math.min(0.98, Math.max(0.15, sg10Curve.Kie * FL * FL)).toFixed(3));
   const xT =
     params.customXTOverride && params.customXTOverride > 0
       ? Math.min(0.99, Math.max(0.05, params.customXTOverride))
-      : params.flowDirection === 'FTO'
-      ? trimSpec.xT_FTO
-      : trimSpec.xT_FTC;
+      : sg10XT100;
 
   const bodyMinWall_mm = sizeSpec.bodyMinWall_mm[params.pressureClass];
   const stemDiaRecommended_mm =
@@ -914,10 +919,165 @@ export function computeCorrelatedValveParameters(params: {
   };
 }
 
+export interface Sg10RecoveryCurve {
+  /** Pressure recovery factor FL at 10%, 20%, ..., 100% travel */
+  FL: readonly [number, number, number, number, number, number, number, number, number, number];
+  /** Pressure drop ratio factor xT at 10%, 20%, ..., 100% travel */
+  xT: readonly [number, number, number, number, number, number, number, number, number, number];
+  /** Incipient/recommended cavitation factor Kie (sigma_mr = 1 / (Kie * FL^2)) */
+  Kie: number;
+  /** SG10 manual source reference */
+  reference: string;
+}
+
 /**
- * Evaluates stroke- and flow-direction-dependent pressure recovery & choked flow factors
- * per Parcol Bulletin 1-I (Fig. 6) and Warren Controls VSSTR-07/12 (Table 3).
- * At lower travel %, throttling at the seat metering edge increases FL(h); at 100% open it converges to FL_rated.
+ * Severn Glocon SG10 Control Valve Sizing & Selection Manual (Pages 38–41)
+ * Travel-dependent Pressure Recovery Ratios for Series 5000 Multi-Purpose Valves
+ * (Series 5410 Globe & Series 5430 Angle), indexed by 10%..100% travel.
+ * FTO = Flowed Under; FTC = Flowed Over.
+ */
+const SG10_CURVES_GLOBE: Record<
+  'CONTOURED_FTO' | 'CONTOURED_FTC' | 'PORTED_FTO' | 'PORTED_FTC' | 'CAGE_1' | 'CAGE_2' | 'CAGE_3' | 'CAGE_4',
+  Sg10RecoveryCurve
+> = {
+  CONTOURED_FTO: {
+    FL: [0.96, 0.95, 0.94, 0.93, 0.92, 0.92, 0.91, 0.90, 0.90, 0.90],
+    xT: [0.86, 0.85, 0.83, 0.80, 0.80, 0.78, 0.75, 0.75, 0.75, 0.75],
+    Kie: 0.80,
+    reference: 'SG10 p.38 Series 5410 Globe Contoured (Flowed Under)',
+  },
+  CONTOURED_FTC: {
+    FL: [0.53, 0.55, 0.68, 0.85, 0.87, 0.87, 0.86, 0.85, 0.85, 0.85],
+    xT: [0.62, 0.65, 0.65, 0.67, 0.67, 0.70, 0.70, 0.70, 0.70, 0.70],
+    Kie: 0.81,
+    reference: 'SG10 p.38 Series 5410 Globe Contoured (Flowed Over)',
+  },
+  PORTED_FTO: {
+    // 100% travel FL corrected from SG10 printed typo "0.00" to 0.88 (matches FL^2=0.77, sigma_mr=1.43, p.13 Table 1)
+    FL: [0.96, 0.94, 0.92, 0.90, 0.89, 0.88, 0.88, 0.88, 0.88, 0.88],
+    xT: [0.87, 0.84, 0.84, 0.81, 0.81, 0.79, 0.79, 0.79, 0.79, 0.79],
+    Kie: 0.90,
+    reference: 'SG10 p.38 Series 5410 Globe Ported Cage (Flowed Under)',
+  },
+  PORTED_FTC: {
+    FL: [0.56, 0.72, 0.82, 0.86, 0.87, 0.88, 0.88, 0.88, 0.88, 0.88],
+    xT: [0.47, 0.65, 0.75, 0.77, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79],
+    Kie: 0.90,
+    reference: 'SG10 p.38 Series 5410 Globe Ported Cage (Flowed Over)',
+  },
+  CAGE_1: {
+    FL: [0.97, 0.97, 0.96, 0.96, 0.96, 0.95, 0.95, 0.94, 0.94, 0.94],
+    xT: [0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88, 0.88],
+    Kie: 0.95,
+    reference: 'SG10 p.39 Series 5410 Globe Single Cage (Under or Over)',
+  },
+  CAGE_2: {
+    FL: [0.97, 0.97, 0.96, 0.96, 0.96, 0.95, 0.95, 0.95, 0.95, 0.95],
+    xT: [0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90, 0.90],
+    Kie: 0.95,
+    reference: 'SG10 p.39 Series 5410 Globe Double Cage (Under or Over)',
+  },
+  CAGE_3: {
+    FL: [0.97, 0.97, 0.96, 0.96, 0.96, 0.96, 0.96, 0.96, 0.96, 0.96],
+    xT: [0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92, 0.92],
+    Kie: 0.95,
+    reference: 'SG10 p.39 Series 5410 Globe Triple Cage (Under or Over)',
+  },
+  CAGE_4: {
+    FL: [0.98, 0.98, 0.98, 0.98, 0.97, 0.97, 0.97, 0.97, 0.97, 0.97],
+    xT: [0.96, 0.95, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94, 0.94],
+    Kie: 0.95,
+    reference: 'SG10 p.39 Series 5410 Globe Quad-Cage (Under or Over)',
+  },
+};
+
+const SG10_CURVES_ANGLE: Record<
+  'CONTOURED_FTO' | 'CONTOURED_FTC' | 'PORTED_FTO' | 'PORTED_FTC' | 'CAGE_1' | 'CAGE_2' | 'CAGE_3' | 'CAGE_4',
+  Sg10RecoveryCurve
+> = {
+  CONTOURED_FTO: {
+    FL: [0.96, 0.95, 0.94, 0.93, 0.92, 0.92, 0.91, 0.90, 0.90, 0.90],
+    xT: [0.85, 0.85, 0.80, 0.80, 0.80, 0.78, 0.78, 0.75, 0.75, 0.75],
+    Kie: 0.80,
+    reference: 'SG10 p.40 Series 5430 Angle Contoured (Flowed Under)',
+  },
+  CONTOURED_FTC: {
+    FL: [0.89, 0.83, 0.79, 0.78, 0.75, 0.73, 0.72, 0.72, 0.72, 0.72],
+    xT: [0.47, 0.53, 0.57, 0.63, 0.63, 0.67, 0.67, 0.67, 0.67, 0.67],
+    Kie: 0.84,
+    reference: 'SG10 p.40 Series 5430 Angle Contoured (Flowed Over)',
+  },
+  PORTED_FTO: {
+    FL: [0.94, 0.94, 0.93, 0.93, 0.92, 0.92, 0.91, 0.91, 0.91, 0.91],
+    xT: [0.85, 0.83, 0.83, 0.82, 0.81, 0.79, 0.79, 0.79, 0.79, 0.79],
+    Kie: 0.90,
+    reference: 'SG10 p.40 Series 5430 Angle Ported Cage (Flowed Under)',
+  },
+  PORTED_FTC: {
+    FL: [0.90, 0.90, 0.89, 0.89, 0.88, 0.88, 0.87, 0.87, 0.87, 0.87],
+    xT: [0.84, 0.83, 0.81, 0.80, 0.79, 0.79, 0.79, 0.79, 0.79, 0.79],
+    Kie: 0.90,
+    reference: 'SG10 p.40 Series 5430 Angle Ported Cage (Flowed Over)',
+  },
+  CAGE_1: {
+    FL: [0.97, 0.97, 0.96, 0.96, 0.96, 0.95, 0.95, 0.94, 0.94, 0.94],
+    xT: [0.89, 0.89, 0.87, 0.87, 0.87, 0.86, 0.86, 0.86, 0.86, 0.86],
+    Kie: 0.95,
+    reference: 'SG10 p.41 Series 5430 Angle Single Cage (Under or Over)',
+  },
+  CAGE_2: {
+    FL: [0.97, 0.97, 0.96, 0.96, 0.96, 0.95, 0.95, 0.95, 0.95, 0.95],
+    xT: [0.91, 0.91, 0.90, 0.90, 0.89, 0.89, 0.89, 0.89, 0.89, 0.89],
+    Kie: 0.95,
+    reference: 'SG10 p.41 Series 5430 Angle Double Cage (Under or Over)',
+  },
+  CAGE_3: {
+    FL: [0.97, 0.97, 0.97, 0.97, 0.97, 0.96, 0.96, 0.96, 0.96, 0.96],
+    xT: [0.92, 0.92, 0.92, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91, 0.91],
+    Kie: 0.95,
+    reference: 'SG10 p.41 Series 5430 Angle Triple Cage (Under or Over)',
+  },
+  CAGE_4: {
+    FL: [0.98, 0.98, 0.98, 0.98, 0.97, 0.97, 0.97, 0.97, 0.97, 0.97],
+    xT: [0.94, 0.94, 0.94, 0.93, 0.93, 0.93, 0.93, 0.93, 0.93, 0.93],
+    Kie: 0.95,
+    reference: 'SG10 p.41 Series 5430 Angle Quad-Cage (Under or Over)',
+  },
+};
+
+export function getSg10RecoveryCurve(
+  bodyStyle: BodyStyleId = 'GLOBE_STRAIGHT',
+  trimStyle?: TrimStyleId,
+  flowDirection: FlowDirectionId = 'FTO',
+  stages = 1
+): Sg10RecoveryCurve {
+  const table = bodyStyle === 'ANGLE_BODY' ? SG10_CURVES_ANGLE : SG10_CURVES_GLOBE;
+
+  if (stages >= 4) return table.CAGE_4;
+  if (trimStyle === 'CAGE_3STAGE' || stages === 3) return table.CAGE_3;
+  if (trimStyle === 'CAGE_2STAGE' || stages === 2) return table.CAGE_2;
+  if (trimStyle === 'CAGE_1STAGE') return table.CAGE_1;
+  if (trimStyle === 'WINDOW_CAGE') {
+    return flowDirection === 'FTC' ? table.PORTED_FTC : table.PORTED_FTO;
+  }
+  return flowDirection === 'FTC' ? table.CONTOURED_FTC : table.CONTOURED_FTO;
+}
+
+function interpolateSg10Table(
+  values: readonly [number, number, number, number, number, number, number, number, number, number],
+  travelPct: number
+): number {
+  const clamped = Math.max(10, Math.min(100, travelPct));
+  const scaled = (clamped - 10) / 10; // 0.0 to 9.0
+  const idx = Math.min(8, Math.floor(scaled));
+  const frac = scaled - idx;
+  return values[idx] + frac * (values[idx + 1] - values[idx]);
+}
+
+/**
+ * Evaluates stroke-, body-, trim-, and flow-direction-dependent pressure recovery & choked flow factors
+ * using Severn Glocon SG10 Control Valve Sizing & Selection Manual (Pages 38–41) as the default reference.
+ * Preserves any user custom FL_rated / xT_rated overrides by scaling the SG10 curve proportionally.
  */
 export function evaluateStrokeDependentRecovery(params: {
   FL_rated: number;
@@ -926,26 +1086,41 @@ export function evaluateStrokeDependentRecovery(params: {
   travelPct: number;
   stages: number;
   flowDirection: FlowDirectionId;
-}): { FL_atTravel: number; Kc_atTravel: number; xT_atTravel: number } {
-  const h = Math.max(0.05, Math.min(1.0, params.travelPct / 100));
-  const lowLiftBoost = params.stages >= 2 ? 0.02 : 0.06;
-  const directionShape =
-    params.stages === 1 && params.flowDirection === 'FTC'
-      ? 1 - Math.pow(h, 0.85)
-      : 1 - Math.pow(h, 1.35);
-
-  const FL_atTravel = Math.min(
-    0.99,
-    Math.max(0.35, params.FL_rated + lowLiftBoost * directionShape)
+  bodyStyle?: BodyStyleId;
+  trimStyle?: TrimStyleId;
+}): {
+  FL_atTravel: number;
+  Kc_atTravel: number;
+  xT_atTravel: number;
+  Kie: number;
+  sigma_mr_atTravel: number;
+} {
+  const curve = getSg10RecoveryCurve(
+    params.bodyStyle ?? 'GLOBE_STRAIGHT',
+    params.trimStyle,
+    params.flowDirection,
+    params.stages
   );
-  const ratio = FL_atTravel / Math.max(0.2, params.FL_rated);
-  const Kc_atTravel = Math.min(0.98, Math.max(0.25, params.Kc_rated * ratio * ratio));
-  const xT_atTravel = Math.min(0.95, Math.max(0.15, params.xT_rated * Math.pow(ratio, 1.3)));
+
+  const flTable = interpolateSg10Table(curve.FL, params.travelPct);
+  const xtTable = interpolateSg10Table(curve.xT, params.travelPct);
+
+  // Proportionally preserve custom FL / xT overrides if FL_rated / xT_rated differ from SG10 100%-travel baseline
+  const flScale = params.FL_rated / Math.max(0.2, curve.FL[9]);
+  const xtScale = params.xT_rated / Math.max(0.1, curve.xT[9]);
+
+  const FL_atTravel = Math.min(0.99, Math.max(0.25, flTable * flScale));
+  const xT_atTravel = Math.min(0.98, Math.max(0.12, xtTable * xtScale));
+  const Kie = curve.Kie;
+  const Kc_atTravel = Math.min(0.98, Math.max(0.15, Kie * FL_atTravel * FL_atTravel));
+  const sigma_mr_atTravel = Math.max(1.04, 1.0 / Math.max(0.10, Kc_atTravel));
 
   return {
     FL_atTravel: Number(FL_atTravel.toFixed(3)),
     Kc_atTravel: Number(Kc_atTravel.toFixed(3)),
     xT_atTravel: Number(xT_atTravel.toFixed(3)),
+    Kie,
+    sigma_mr_atTravel: Number(sigma_mr_atTravel.toFixed(2)),
   };
 }
 
