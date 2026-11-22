@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, useId } from 'react';
 import {
   Activity,
   Sliders,
@@ -125,8 +125,126 @@ import {
 } from './engine/industryStandards';
 
 // Application revision displayed in the header title bar & browser tab.
-// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.7) unless minor/major escalation is requested.
-export const APP_VERSION = '1.0.7';
+// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.9) unless minor/major escalation is requested.
+export const APP_VERSION = '1.0.8';
+
+/**
+ * Top-layer, viewport-aware tooltip satisfying WCAG 1.4.13 (hoverable, persistent, Escape-dismissible).
+ * Uses native Popover API when available and fixed viewport coordinates to avoid overflow-x-auto clipping.
+ */
+const InfoTooltip: React.FC<{
+  label: string;
+  text: string;
+  placement?: 'bottom' | 'top';
+  align?: 'left' | 'right';
+}> = ({ label, text, placement = 'bottom', align = 'left' }) => {
+  const tooltipId = useId();
+  const triggerRef = useRef<HTMLButtonElement | null>(null);
+  const popoverRef = useRef<HTMLDivElement | null>(null);
+  const closeTimerRef = useRef<number | null>(null);
+  const [isOpen, setIsOpen] = useState(false);
+  const [coords, setCoords] = useState<{ top: number; left: number }>({ top: 0, left: 0 });
+
+  const updatePosition = () => {
+    const trigger = triggerRef.current;
+    if (!trigger) return;
+    const rect = trigger.getBoundingClientRect();
+    const width = 256;
+    const margin = 8;
+    const rawLeft = align === 'right' ? rect.right - width : rect.left;
+    const left = Math.max(margin, Math.min(rawLeft, window.innerWidth - width - margin));
+    const top =
+      placement === 'top'
+        ? Math.max(margin, rect.top - 8)
+        : Math.min(window.innerHeight - margin, rect.bottom + 6);
+    setCoords({ top, left });
+  };
+
+  const openTooltip = () => {
+    if (closeTimerRef.current !== null) {
+      window.clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = null;
+    }
+    updatePosition();
+    setIsOpen(true);
+    const el = popoverRef.current as (HTMLDivElement & { showPopover?: () => void }) | null;
+    if (el && typeof el.showPopover === 'function') {
+      try {
+        if (!el.matches(':popover-open')) el.showPopover();
+      } catch {
+        // Fallback to React state positioning when Popover API is unavailable
+      }
+    }
+  };
+
+  const closeTooltip = () => {
+    setIsOpen(false);
+    const el = popoverRef.current as (HTMLDivElement & { hidePopover?: () => void }) | null;
+    if (el && typeof el.hidePopover === 'function') {
+      try {
+        if (el.matches(':popover-open')) el.hidePopover();
+      } catch {
+        // Ignore if already closed
+      }
+    }
+  };
+
+  const scheduleClose = () => {
+    if (closeTimerRef.current !== null) window.clearTimeout(closeTimerRef.current);
+    closeTimerRef.current = window.setTimeout(() => closeTooltip(), 120);
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation();
+        closeTooltip();
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [isOpen]);
+
+  return (
+    <span className="relative inline-flex items-center shrink-0">
+      <button
+        ref={triggerRef}
+        type="button"
+        aria-label={`${label}: more info`}
+        aria-describedby={isOpen ? tooltipId : undefined}
+        aria-expanded={isOpen}
+        onMouseEnter={openTooltip}
+        onMouseLeave={scheduleClose}
+        onFocus={openTooltip}
+        onBlur={scheduleClose}
+        onClick={() => (isOpen ? closeTooltip() : openTooltip())}
+        className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] transition"
+      >
+        <Info className="w-3.5 h-3.5" aria-hidden="true" />
+      </button>
+      <div
+        ref={popoverRef}
+        id={tooltipId}
+        role="tooltip"
+        {...({ popover: 'auto' } as Record<string, string>)}
+        onMouseEnter={openTooltip}
+        onMouseLeave={scheduleClose}
+        style={{
+          position: 'fixed',
+          top: `${coords.top}px`,
+          left: `${coords.left}px`,
+          transform: placement === 'top' ? 'translateY(-100%)' : undefined,
+        }}
+        className={`${
+          isOpen ? 'block' : 'hidden'
+        } z-[90] w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal`}
+      >
+        {text}
+      </div>
+    </span>
+  );
+};
 
 type ActiveTabId =
   | 'PROCESS_SIZING'
@@ -187,16 +305,27 @@ export default function App() {
   const toolsMenuRef = useRef<HTMLDivElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Close tools menu on outside click
+  // Close tools menu on outside click or Escape key
   useEffect(() => {
     const handleOutsideClick = (event: MouseEvent) => {
       if (toolsMenuRef.current && !toolsMenuRef.current.contains(event.target as Node)) {
         setIsToolsMenuOpen(false);
       }
     };
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape' && isToolsMenuOpen) {
+        setIsToolsMenuOpen(false);
+        const btn = toolsMenuRef.current?.querySelector('button');
+        btn?.focus();
+      }
+    };
     document.addEventListener('mousedown', handleOutsideClick);
-    return () => document.removeEventListener('mousedown', handleOutsideClick);
-  }, []);
+    document.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [isToolsMenuOpen]);
 
   // Keep browser tab title synchronized with APP_VERSION
   useEffect(() => {
@@ -1407,6 +1536,12 @@ export default function App() {
 
   return (
     <div className="min-h-screen bg-[#edf1f5] text-[#0b2545] flex flex-col">
+      <a
+        href="#main-content"
+        className="visually-hidden fixed top-2 left-2 z-[100] bg-[#0f8b8d] text-white px-3 py-1.5 rounded-md text-xs font-mono font-semibold shadow-lg no-print"
+      >
+        Skip to main content
+      </a>
       {/* DY-MIMIC DEEP NAVY MASTHEAD WITH 4PX SAFETY AMBER BOTTOM BORDER */}
       <header className="sticky top-0 z-50 bg-[#0b2545] border-b-4 border-[#f2a900] px-6 py-3.5 shadow-md no-print">
         <div className="max-w-[1600px] mx-auto flex flex-wrap items-center justify-between gap-4">
@@ -1482,11 +1617,13 @@ export default function App() {
                 onClick={() => setIsToolsMenuOpen((prev) => !prev)}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-lg bg-[#13315c] hover:bg-[#0f8b8d] text-white border border-[#0f8b8d]/70 text-xs font-mono font-semibold transition shadow-sm"
                 aria-expanded={isToolsMenuOpen}
-                aria-haspopup="true"
+                aria-haspopup="menu"
+                aria-controls="tools-dropdown-menu"
               >
-                <Wrench className="w-3.5 h-3.5 text-[#ffd77a]" />
+                <Wrench className="w-3.5 h-3.5 text-[#ffd77a]" aria-hidden="true" />
                 Tools
                 <ChevronDown
+                  aria-hidden="true"
                   className={`w-3.5 h-3.5 transition-transform duration-200 ${
                     isToolsMenuOpen ? 'rotate-180' : ''
                   }`}
@@ -1494,18 +1631,24 @@ export default function App() {
               </button>
 
               {isToolsMenuOpen && (
-                <div className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0f1419] border border-[#2f3b47] shadow-2xl py-2 z-50 text-xs font-mono divide-y divide-[#2f3b47]/60">
+                <div
+                  id="tools-dropdown-menu"
+                  role="menu"
+                  aria-label="Engineering Tools and Exports"
+                  className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0f1419] border border-[#2f3b47] shadow-2xl py-2 z-50 text-xs font-mono divide-y divide-[#2f3b47]/60"
+                >
                   {/* File Save / Load group */}
-                  <div className="py-1">
+                  <div className="py-1" role="group" aria-label="Project Files">
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsToolsMenuOpen(false);
                         handleSaveDYSol();
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-[#7fe0e2] flex items-center gap-2.5 transition"
                     >
-                      <Save className="w-4 h-4 text-[#7fe0e2]" />
+                      <Save className="w-4 h-4 text-[#7fe0e2]" aria-hidden="true" />
                       <div>
                         <div className="font-semibold text-white">Save .DYSol File</div>
                         <div className="text-[10px] text-slate-400">Save complete inputs & outputs</div>
@@ -1513,13 +1656,14 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsToolsMenuOpen(false);
                         handleLoadDYSolClick();
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-[#8be0a8] flex items-center gap-2.5 transition"
                     >
-                      <Upload className="w-4 h-4 text-[#8be0a8]" />
+                      <Upload className="w-4 h-4 text-[#8be0a8]" aria-hidden="true" />
                       <div>
                         <div className="font-semibold text-white">Load .DYSol File</div>
                         <div className="text-[10px] text-slate-400">Restore sizing & valve state</div>
@@ -1528,16 +1672,17 @@ export default function App() {
                   </div>
 
                   {/* CAD, CNC & Schedule Exports */}
-                  <div className="py-1">
+                  <div className="py-1" role="group" aria-label="CAD and CNC Exports">
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsToolsMenuOpen(false);
                         handleExportDXF();
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-white flex items-center gap-2.5 transition"
                     >
-                      <Download className="w-4 h-4 text-[#7fe0e2]" />
+                      <Download className="w-4 h-4 text-[#7fe0e2]" aria-hidden="true" />
                       <div>
                         <div className="font-semibold text-white">.DXF CAD</div>
                         <div className="text-[10px] text-slate-400">2D unrolled cage perforation</div>
@@ -1545,13 +1690,14 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsToolsMenuOpen(false);
                         handleExportGCode();
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-white flex items-center gap-2.5 transition"
                     >
-                      <FileCode className="w-4 h-4 text-[#8be0a8]" />
+                      <FileCode className="w-4 h-4 text-[#8be0a8]" aria-hidden="true" />
                       <div>
                         <div className="font-semibold text-white">4-AXIS G-CODE</div>
                         <div className="text-[10px] text-slate-400">CNC 4-axis rotary indexer code</div>
@@ -1559,13 +1705,14 @@ export default function App() {
                     </button>
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsToolsMenuOpen(false);
                         handleExportCSV();
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-white flex items-center gap-2.5 transition"
                     >
-                      <Table className="w-4 h-4 text-[#ffd77a]" />
+                      <Table className="w-4 h-4 text-[#ffd77a]" aria-hidden="true" />
                       <div>
                         <div className="font-semibold text-white">.CSV SCHEDULE</div>
                         <div className="text-[10px] text-slate-400">Drilled cage row perforation matrix</div>
@@ -1574,16 +1721,17 @@ export default function App() {
                   </div>
 
                   {/* Print Datasheet */}
-                  <div className="py-1">
+                  <div className="py-1" role="group" aria-label="Reporting">
                     <button
                       type="button"
+                      role="menuitem"
                       onClick={() => {
                         setIsToolsMenuOpen(false);
                         window.print();
                       }}
                       className="w-full text-left px-3.5 py-2 hover:bg-[#182028] text-slate-200 hover:text-[#ffd77a] flex items-center gap-2.5 transition"
                     >
-                      <Printer className="w-4 h-4 text-[#ffd77a]" />
+                      <Printer className="w-4 h-4 text-[#ffd77a]" aria-hidden="true" />
                       <div>
                         <div className="font-semibold text-white">PRINT DATASHEET</div>
                         <div className="text-[10px] text-slate-400">Print clean engineering report</div>
@@ -1603,59 +1751,67 @@ export default function App() {
           {/* Compact Project / Tag Identification Strip (Synced to Print Datasheet & .DYSol) */}
           <div className="bg-white rounded-lg px-3 py-2 border border-[#cfd8e3] shadow-sm grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-12 gap-2.5 items-center">
             <div className="lg:col-span-2 flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+              <label htmlFor="meta-tag-number" className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
                 Tag No.
-              </span>
+              </label>
               <input
+                id="meta-tag-number"
                 type="text"
                 value={projectMeta.tagNumber}
                 onChange={(e) => setProjectMeta({ ...projectMeta, tagNumber: e.target.value })}
-                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono font-bold text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono font-bold text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                 placeholder="FV-1001A"
               />
             </div>
             <div className="lg:col-span-5 flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+              <label htmlFor="meta-service-desc" className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
                 Service
-              </span>
+              </label>
               <input
+                id="meta-service-desc"
                 type="text"
                 value={projectMeta.serviceDescription}
                 onChange={(e) =>
                   setProjectMeta({ ...projectMeta, serviceDescription: e.target.value })
                 }
-                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                 placeholder="Service Description"
               />
             </div>
             <div className="lg:col-span-3 flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+              <label htmlFor="meta-line-number" className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
                 Line / P&amp;ID
-              </span>
+              </label>
               <input
+                id="meta-line-number"
                 type="text"
                 value={projectMeta.lineNumber}
                 onChange={(e) => setProjectMeta({ ...projectMeta, lineNumber: e.target.value })}
-                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                 placeholder='4"-BFW-104'
               />
             </div>
             <div className="lg:col-span-2 flex items-center gap-2">
-              <span className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
+              <label htmlFor="meta-project-rev" className="text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-bold shrink-0">
                 Rev
-              </span>
+              </label>
               <input
+                id="meta-project-rev"
                 type="text"
                 value={projectMeta.projectRev}
                 onChange={(e) => setProjectMeta({ ...projectMeta, projectRev: e.target.value })}
-                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-[#f8fafc] border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                 placeholder="Rev A"
               />
             </div>
           </div>
 
           {/* SEGMENTED WORKBENCH MODE SWITCHER WITH LIVE PASS/WARNING/CRITICAL INDICATORS */}
-          <div className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-[#cfd8e3] shadow-sm">
+          <div
+            role="tablist"
+            aria-label="Engineering Workbench Modules"
+            className="flex flex-wrap items-center gap-1.5 bg-white p-1.5 rounded-xl border border-[#cfd8e3] shadow-sm"
+          >
             {[
               {
                 id: 'PROCESS_SIZING',
@@ -1687,7 +1843,7 @@ export default function App() {
                 label: '6. Valve Correlation Table',
                 icon: Table,
               },
-            ].map((tab) => {
+            ].map((tab, idx, allTabs) => {
               const Icon = tab.icon;
               const isActive = activeTab === tab.id;
               const tabStatus = tabStatuses[tab.id as ActiveTabId];
@@ -1700,7 +1856,25 @@ export default function App() {
               return (
                 <button
                   key={tab.id}
+                  id={`workbench-tab-${tab.id}`}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  tabIndex={isActive ? 0 : -1}
                   onClick={() => setActiveTab(tab.id as ActiveTabId)}
+                  onKeyDown={(e) => {
+                    let nextIdx: number | null = null;
+                    if (e.key === 'ArrowRight') nextIdx = (idx + 1) % allTabs.length;
+                    else if (e.key === 'ArrowLeft') nextIdx = (idx - 1 + allTabs.length) % allTabs.length;
+                    else if (e.key === 'Home') nextIdx = 0;
+                    else if (e.key === 'End') nextIdx = allTabs.length - 1;
+                    if (nextIdx !== null) {
+                      e.preventDefault();
+                      const nextTab = allTabs[nextIdx];
+                      setActiveTab(nextTab.id as ActiveTabId);
+                      document.getElementById(`workbench-tab-${nextTab.id}`)?.focus();
+                    }
+                  }}
                   className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-mono transition ${
                     isActive
                       ? 'bg-[#0f8b8d] text-white font-semibold shadow-sm'
@@ -1708,7 +1882,7 @@ export default function App() {
                   }`}
                   title={`Module status: ${tabStatus}`}
                 >
-                  <Icon className="w-3.5 h-3.5 shrink-0" />
+                  <Icon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
                   <span>{tab.label}</span>
                   <span
                     className={`w-2 h-2 rounded-full shrink-0 ${dotColor}`}
@@ -1791,13 +1965,14 @@ export default function App() {
           <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-2.5">
             {/* Nominal Valve Size */}
             <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+              <label htmlFor="hw-nominal-size" className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
                 Nominal Valve Size (DN / NPS)
               </label>
               <select
+                id="hw-nominal-size"
                 value={selectedDN}
                 onChange={(e) => handleSelectSizeFromSchedule(Number(e.target.value))}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
               >
                 {GENERIC_VALVE_SCHEDULE.map((s) => (
                   <option key={s.dn} value={s.dn}>
@@ -1809,13 +1984,14 @@ export default function App() {
 
             {/* Pressure Rating Class */}
             <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+              <label htmlFor="hw-pressure-class" className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
                 Pressure Class (ASME / PN)
               </label>
               <select
+                id="hw-pressure-class"
                 value={pressureClass}
                 onChange={(e) => setPressureClass(e.target.value as PressureClassId)}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
               >
                 {Object.values(PRESSURE_CLASSES).map((pc) => (
                   <option key={pc.id} value={pc.id}>
@@ -1827,13 +2003,14 @@ export default function App() {
 
             {/* Generic Trim Family */}
             <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+              <label htmlFor="hw-trim-style" className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
                 Generic Trim Style & Stages
               </label>
               <select
+                id="hw-trim-style"
                 value={trimStyle}
                 onChange={(e) => setTrimStyle(e.target.value as TrimStyleId)}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
               >
                 {Object.values(TRIM_STYLES).map((ts) => (
                   <option key={ts.id} value={ts.id}>
@@ -1845,17 +2022,18 @@ export default function App() {
 
             {/* Reduced Trim Capacity Step */}
             <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+              <label htmlFor="hw-reduced-trim" className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
                 Trim Capacity Factor (R5 Series)
               </label>
               <select
+                id="hw-reduced-trim"
                 value={reducedTrimFactor}
                 onChange={(e) => {
                   setReducedTrimFactor(Number(e.target.value));
                   setCustomBoreOverride(null);
                   setCustomRatedCvOverride(null);
                 }}
-                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
               >
                 {REDUCED_TRIM_FACTORS.map((rf) => (
                   <option key={rf.factor} value={rf.factor}>
@@ -1867,22 +2045,26 @@ export default function App() {
 
             {/* Body Pattern & Flow Direction */}
             <div className="bg-white rounded-lg p-2.5 border border-[#cfd8e3] shadow-sm">
-              <label className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
+              <label htmlFor="hw-body-style" className="block text-[10px] font-mono uppercase tracking-wider text-[#13315c] font-semibold mb-1">
                 Body Style & Flow Direction
               </label>
               <div className="grid grid-cols-2 gap-1.5">
                 <select
+                  id="hw-body-style"
+                  aria-label="Body Style"
                   value={bodyStyle}
                   onChange={(e) => setBodyStyle(e.target.value as BodyStyleId)}
-                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                 >
                   <option value="GLOBE_STRAIGHT">Globe (1.0x)</option>
                   <option value="ANGLE_BODY">Angle (1.12x)</option>
                 </select>
                 <select
+                  id="hw-flow-direction"
+                  aria-label="Flow Direction"
                   value={flowDirection}
                   onChange={(e) => setFlowDirection(e.target.value as FlowDirectionId)}
-                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                 >
                   <option value="FTC">FTC (Over)</option>
                   <option value="FTO">FTO (Under)</option>
@@ -2051,7 +2233,7 @@ export default function App() {
       </section>
 
       {/* MAIN WORKBENCH CONTENT AREA */}
-      <main className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-6 space-y-6 no-print">
+      <main id="main-content" tabIndex={-1} className="flex-1 max-w-[1600px] w-full mx-auto px-6 py-6 space-y-6 no-print focus:outline-none">
         {/* =====================================================================
             TAB 1: MULTI-CONDITION PROCESS SIZING, SWAGED PIPING & ACOUSTIC NOISE
            ===================================================================== */}
@@ -2079,7 +2261,7 @@ export default function App() {
                     <select
                       onChange={(e) => applyFluidPresetToAllCases(e.target.value)}
                       defaultValue="BFW_185C"
-                      className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       {FLUID_PRESETS.map((fp) => (
                         <option key={fp.id} value={fp.id}>
@@ -2104,7 +2286,7 @@ export default function App() {
                             e.target.value ? Number(e.target.value) : null
                           )
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -2121,7 +2303,7 @@ export default function App() {
                             e.target.value ? Number(e.target.value) : null
                           )
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -2138,7 +2320,7 @@ export default function App() {
                             e.target.value ? Number(e.target.value) : null
                           )
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                   </div>
@@ -2178,7 +2360,7 @@ export default function App() {
                       <select
                         value={pipeScheduleId}
                         onChange={(e) => handlePipeScheduleChange(e.target.value)}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       >
                         <option value="CUSTOM">Custom Pipe ID / Wall</option>
                         {ASME_PIPE_SCHEDULES.map((sched) => (
@@ -2199,7 +2381,7 @@ export default function App() {
                             e.target.value as 'CARBON_STEEL' | 'STAINLESS_ALLOY'
                           )
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       >
                         <option value="STAINLESS_ALLOY">SS / Cr-Mo (≤15 m/s)</option>
                         <option value="CARBON_STEEL">Carbon Steel (≤10.5 m/s)</option>
@@ -2220,7 +2402,7 @@ export default function App() {
                           setPipeScheduleId('CUSTOM');
                           setPiping({ ...piping, upstreamPipeID_mm: Number(e.target.value) });
                         }}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -2235,7 +2417,7 @@ export default function App() {
                           setPipeScheduleId('CUSTOM');
                           setPiping({ ...piping, downstreamPipeID_mm: Number(e.target.value) });
                         }}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -2250,7 +2432,7 @@ export default function App() {
                           setPipeScheduleId('CUSTOM');
                           setPiping({ ...piping, pipeWallThickness_mm: Number(e.target.value) });
                         }}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -2264,7 +2446,7 @@ export default function App() {
                         onChange={(e) =>
                           setPiping({ ...piping, upstreamPipeLength_m: Number(e.target.value) })
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -2278,7 +2460,7 @@ export default function App() {
                         onChange={(e) =>
                           setPiping({ ...piping, actuatorCloseTime_s: Number(e.target.value) })
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                   </div>
@@ -2293,7 +2475,7 @@ export default function App() {
                     <select
                       value={bodyMaterial}
                       onChange={(e) => setBodyMaterial(e.target.value as BodyMaterialGroupId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       {Object.values(BODY_MATERIAL_GROUPS).map((m) => (
                         <option key={m.id} value={m.id}>
@@ -2309,7 +2491,7 @@ export default function App() {
                     <select
                       value={endConnection}
                       onChange={(e) => setEndConnection(e.target.value as EndConnectionId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       <option value="RF_FLANGED">ASME B16.5 RF</option>
                       <option value="RTJ_FLANGED">ASME B16.5 RTJ</option>
@@ -2327,7 +2509,7 @@ export default function App() {
                         min="0"
                         value={h2sPartialPressure_bar}
                         onChange={(e) => setH2sPartialPressure_bar(Number(e.target.value))}
-                        className="w-1/2 bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-1/2 bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         title="H2S partial pressure (bar)"
                       />
                       <input
@@ -2336,7 +2518,7 @@ export default function App() {
                         min="0"
                         value={chloride_ppm}
                         onChange={(e) => setChloride_ppm(Number(e.target.value))}
-                        className="w-1/2 bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-1/2 bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         title="Chloride concentration (ppm)"
                       />
                     </div>
@@ -2505,7 +2687,7 @@ export default function App() {
             </div>
 
             {/* CARD 2: Multi-Condition Operating Inputs Table */}
-            <div className="dy-card overflow-hidden">
+            <div className="dy-card overflow-hidden dy-defer-section">
               <div className="section-band px-5 py-3.5 flex items-center justify-between gap-4">
                 <div>
                   <h2 className="text-sm font-bold text-white">
@@ -2572,7 +2754,7 @@ export default function App() {
                         type: e.target.value as CharacteristicTypeId,
                       })
                     }
-                    className="bg-[#0f1419] border border-[#2f3b47] text-slate-200 rounded px-2.5 py-1 text-xs focus:border-[#0f8b8d] focus:outline-none"
+                    className="bg-[#0f1419] border border-[#2f3b47] text-slate-200 rounded px-2.5 py-1 text-xs focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     title="Trim Characteristic Law"
                   >
                     <option value="EQUAL_PCT">Equal-Percentage (R^((h-1)))</option>
@@ -2637,40 +2819,25 @@ export default function App() {
                   ) => (
                     <div className="flex items-center justify-between gap-2">
                       <span>{label}</span>
-                      <span className="relative group inline-flex items-center shrink-0">
-                        <button
-                          type="button"
-                          aria-label={`${label}: ${infoText}`}
-                          className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                        >
-                          <Info className="w-3.5 h-3.5" />
-                        </button>
-                        <span
-                          role="tooltip"
-                          className={`hidden group-hover:block group-focus-within:block absolute ${
-                            align === 'right' ? 'right-0' : 'left-0'
-                          } ${
-                            placement === 'top' ? 'bottom-full mb-1.5' : 'top-full mt-1.5'
-                          } z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none`}
-                        >
-                          {infoText}
-                        </span>
-                      </span>
+                      <InfoTooltip label={label} text={infoText} placement={placement} align={align} />
                     </div>
                   );
 
                   return (
-                    <table className="w-full text-left border-collapse text-xs font-mono">
+                    <table className="w-full text-left border-separate border-spacing-0 text-xs font-mono">
+                      <caption className="visually-hidden">
+                        Multi-Condition Process Operating Cases and IEC 60534 Sizing Inputs
+                      </caption>
                       <thead>
                         <tr className="border-b border-[#cfd8e3] text-[#13315c] bg-[#edf1f5]">
-                          <th className="py-2.5 px-3 sticky left-0 z-20 hover:z-30 focus-within:z-30 bg-[#edf1f5] min-w-[230px] border-r border-[#cfd8e3]">
+                          <th scope="col" className="py-2.5 px-3 sticky left-0 z-20 hover:z-30 focus-within:z-30 bg-[#edf1f5] min-w-[230px] border-r border-b border-[#cfd8e3]">
                             {renderParamLabel(
                               'Parameter / Operating Case',
                               'Each column represents a process operating condition (e.g. Min, Normal, Max, Start-Up, Upset). Edit the case name or remove extra cases.'
                             )}
                           </th>
                           {operatingCases.map((c, idx) => (
-                            <th key={c.id} className="py-2 px-2.5 min-w-[145px]">
+                            <th key={c.id} scope="col" className="py-2 px-2.5 min-w-[145px] border-b border-[#cfd8e3]">
                               <div className="flex items-center gap-1.5">
                                 <input
                                   type="text"
@@ -2680,7 +2847,7 @@ export default function App() {
                                     next[idx].label = e.target.value;
                                     setOperatingCases(next);
                                   }}
-                                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1 w-full text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                                  className="bg-white border border-[#cfd8e3] rounded px-2 py-1 w-full text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   aria-label={`Case ${idx + 1} Name`}
                                 />
                                 {operatingCases.length > 1 && (
@@ -2716,7 +2883,7 @@ export default function App() {
                                   next[idx].fluidPhase = e.target.value as any;
                                   setOperatingCases(next);
                                 }}
-                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                               >
                                 <option value="LIQUID">LIQUID</option>
                                 <option value="GAS">GAS</option>
@@ -2735,7 +2902,7 @@ export default function App() {
                                 <select
                                   value={processUnits.flowRate}
                                   onChange={(e) => setProcessUnits({ ...processUnits, flowRate: e.target.value as FlowUnit })}
-                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Change Flow Rate display unit with auto-conversion"
                                 >
                                   <optgroup label="Liquid / Volumetric">
@@ -2752,21 +2919,11 @@ export default function App() {
                                     <option value="lb_h">lb/h</option>
                                   </optgroup>
                                 </select>
-                                <span className="relative group inline-flex items-center shrink-0">
-                                  <button
-                                    type="button"
-                                    aria-label="Flow info"
-                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span
-                                    role="tooltip"
-                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
-                                  >
-                                    Process flow rate: volumetric flow in m³/h or gpm for Liquid, standard volumetric flow in Nm³/h or SCFH/SCFM for Gas, or mass flow in kg/h or lb/h for Steam. Automatically converted when switching units.
-                                  </span>
-                                </span>
+                                <InfoTooltip
+                                  label="Flow Rate"
+                                  text="Process flow rate: volumetric flow in m³/h or gpm for Liquid, standard volumetric flow in Nm³/h or SCFH/SCFM for Gas, or mass flow in kg/h or lb/h for Steam. Automatically converted when switching units."
+                                  align="right"
+                                />
                               </div>
                             </div>
                           </th>
@@ -2784,7 +2941,7 @@ export default function App() {
                                     next[idx].flowRate = Number(toInternalFlow(val, processUnits.flowRate, c.fluidPhase).toFixed(4));
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                 />
                               </td>
                             );
@@ -2799,7 +2956,7 @@ export default function App() {
                                 <select
                                   value={processUnits.P1}
                                   onChange={(e) => setProcessUnits({ ...processUnits, P1: e.target.value as PressureUnit })}
-                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Change P1 display unit with auto-conversion"
                                 >
                                   <option value="bar_a">bar a</option>
@@ -2808,21 +2965,11 @@ export default function App() {
                                   <option value="bar_g">bar g</option>
                                   <option value="psig">psig</option>
                                 </select>
-                                <span className="relative group inline-flex items-center shrink-0">
-                                  <button
-                                    type="button"
-                                    aria-label="P1 info"
-                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span
-                                    role="tooltip"
-                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
-                                  >
-                                    Upstream absolute inlet pressure at the valve inlet flange. Used to compute ΔP, choked pressure drop, and gas expansion factor Y.
-                                  </span>
-                                </span>
+                                <InfoTooltip
+                                  label="P1 Inlet Pressure"
+                                  text="Upstream absolute inlet pressure at the valve inlet flange. Used to compute ΔP, choked pressure drop, and gas expansion factor Y."
+                                  align="right"
+                                />
                               </div>
                             </div>
                           </th>
@@ -2840,7 +2987,7 @@ export default function App() {
                                     next[idx].P1_bar_a = Number(toInternalPressure(val, processUnits.P1).toFixed(4));
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                 />
                               </td>
                             );
@@ -2855,7 +3002,7 @@ export default function App() {
                                 <select
                                   value={processUnits.P2}
                                   onChange={(e) => setProcessUnits({ ...processUnits, P2: e.target.value as PressureUnit })}
-                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Change P2 display unit with auto-conversion"
                                 >
                                   <option value="bar_a">bar a</option>
@@ -2864,21 +3011,11 @@ export default function App() {
                                   <option value="bar_g">bar g</option>
                                   <option value="psig">psig</option>
                                 </select>
-                                <span className="relative group inline-flex items-center shrink-0">
-                                  <button
-                                    type="button"
-                                    aria-label="P2 info"
-                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span
-                                    role="tooltip"
-                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
-                                  >
-                                    Downstream absolute outlet pressure at the valve outlet flange. ΔP = P1 − P2; also drives cavitation index σ and flashing checks.
-                                  </span>
-                                </span>
+                                <InfoTooltip
+                                  label="P2 Outlet Pressure"
+                                  text="Downstream absolute outlet pressure at the valve outlet flange. ΔP = P1 − P2; also drives cavitation index σ and flashing checks."
+                                  align="right"
+                                />
                               </div>
                             </div>
                           </th>
@@ -2900,7 +3037,7 @@ export default function App() {
                                     next[idx].P2_bar_a = Number(toInternalPressure(val, processUnits.P2).toFixed(4));
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                 />
                                 {orificeShare && (
                                   <span className="block text-[9px] font-mono text-[#0f8b8d] mt-0.5">
@@ -2920,7 +3057,7 @@ export default function App() {
                                 <select
                                   value={processUnits.T1}
                                   onChange={(e) => setProcessUnits({ ...processUnits, T1: e.target.value as TemperatureUnit })}
-                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Change Temperature display unit with auto-conversion"
                                 >
                                   <option value="degC">°C</option>
@@ -2928,21 +3065,11 @@ export default function App() {
                                   <option value="K">K</option>
                                   <option value="degR">°R</option>
                                 </select>
-                                <span className="relative group inline-flex items-center shrink-0">
-                                  <button
-                                    type="button"
-                                    aria-label="T1 info"
-                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span
-                                    role="tooltip"
-                                    className="hidden group-hover:block group-focus-within:block absolute right-0 top-full mt-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
-                                  >
-                                    Upstream flowing fluid temperature. Used for ASME B16.34 pressure-temperature rating, gas density, sonic velocity, and thermal expansion.
-                                  </span>
-                                </span>
+                                <InfoTooltip
+                                  label="T1 Inlet Temperature"
+                                  text="Upstream flowing fluid temperature. Used for ASME B16.34 pressure-temperature rating, gas density, sonic velocity, and thermal expansion."
+                                  align="right"
+                                />
                               </div>
                             </div>
                           </th>
@@ -2960,7 +3087,7 @@ export default function App() {
                                     next[idx].T1_degC = Number(toInternalTemperature(val, processUnits.T1).toFixed(2));
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                 />
                               </td>
                             );
@@ -2975,28 +3102,19 @@ export default function App() {
                                 <select
                                   value={processUnits.density}
                                   onChange={(e) => setProcessUnits({ ...processUnits, density: e.target.value as DensityUnit })}
-                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Change Liquid Density display unit with auto-conversion"
                                 >
                                   <option value="kg_m3">kg/m³</option>
                                   <option value="lb_ft3">lb/ft³</option>
                                   <option value="sg">SG (rel water)</option>
                                 </select>
-                                <span className="relative group inline-flex items-center shrink-0">
-                                  <button
-                                    type="button"
-                                    aria-label="Density/MW info"
-                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span
-                                    role="tooltip"
-                                    className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
-                                  >
-                                    For Liquid: flowing density ρ in kg/m³, lb/ft³, or Specific Gravity (SG). For Gas/Steam: molecular weight MW in kg/kmol. Two-Phase displays both ρ_L and MW_g.
-                                  </span>
-                                </span>
+                                <InfoTooltip
+                                  label="Density / Molecular Weight"
+                                  text="For Liquid: flowing density ρ in kg/m³, lb/ft³, or Specific Gravity (SG). For Gas/Steam: molecular weight MW in kg/kmol. Two-Phase displays both ρ_L and MW_g."
+                                  placement="top"
+                                  align="right"
+                                />
                               </div>
                             </div>
                           </th>
@@ -3016,7 +3134,7 @@ export default function App() {
                                         next[idx].rho_kg_m3 = Number(toInternalDensity(val, processUnits.density).toFixed(2));
                                         setOperatingCases(next);
                                       }}
-                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                       title={`Liquid Density (${processUnits.density})`}
                                     />
                                   </div>
@@ -3031,7 +3149,7 @@ export default function App() {
                                         next[idx].molecularWeight = Number(e.target.value);
                                         setOperatingCases(next);
                                       }}
-                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                       title="Vapor/Gas Molecular Weight (kg/kmol)"
                                     />
                                   </div>
@@ -3047,7 +3165,7 @@ export default function App() {
                                     next[idx].rho_kg_m3 = Number(toInternalDensity(val, processUnits.density).toFixed(2));
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title={`Liquid Density (${processUnits.density})`}
                                 />
                               ) : (
@@ -3060,7 +3178,7 @@ export default function App() {
                                     next[idx].molecularWeight = Number(e.target.value);
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Molecular Weight (kg/kmol)"
                                 />
                               )}
@@ -3076,28 +3194,19 @@ export default function App() {
                                 <select
                                   value={processUnits.Pv}
                                   onChange={(e) => setProcessUnits({ ...processUnits, Pv: e.target.value as PressureUnit })}
-                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Change Vapor/Critical Pressure display unit with auto-conversion"
                                 >
                                   <option value="bar_a">bar a</option>
                                   <option value="psia">psia</option>
                                   <option value="kPa_a">kPa a</option>
                                 </select>
-                                <span className="relative group inline-flex items-center shrink-0">
-                                  <button
-                                    type="button"
-                                    aria-label="Pv/gamma info"
-                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span
-                                    role="tooltip"
-                                    className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
-                                  >
-                                    For Liquid: fluid vapor pressure Pv at T1 (governs choked ΔP and cavitation/flashing). For Gas/Steam: specific heat ratio γ = Cp/Cv. Two-Phase displays both Pv and γ.
-                                  </span>
-                                </span>
+                                <InfoTooltip
+                                  label="Vapor Pressure / Gamma"
+                                  text="For Liquid: fluid vapor pressure Pv at T1 (governs choked ΔP and cavitation/flashing). For Gas/Steam: specific heat ratio γ = Cp/Cv. Two-Phase displays both Pv and γ."
+                                  placement="top"
+                                  align="right"
+                                />
                               </div>
                             </div>
                           </th>
@@ -3117,7 +3226,7 @@ export default function App() {
                                         next[idx].Pv_bar_a = Number(toInternalPressure(val, processUnits.Pv).toFixed(4));
                                         setOperatingCases(next);
                                       }}
-                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                       title={`Vapor Pressure Pv (${processUnits.Pv})`}
                                     />
                                   </div>
@@ -3132,7 +3241,7 @@ export default function App() {
                                         next[idx].gammaCpCv = Number(e.target.value);
                                         setOperatingCases(next);
                                       }}
-                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                       title="Specific Heat Ratio Cp/Cv"
                                     />
                                   </div>
@@ -3148,7 +3257,7 @@ export default function App() {
                                     next[idx].Pv_bar_a = Number(toInternalPressure(val, processUnits.Pv).toFixed(4));
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title={`Vapor Pressure Pv (${processUnits.Pv})`}
                                 />
                               ) : (
@@ -3161,7 +3270,7 @@ export default function App() {
                                     next[idx].gammaCpCv = Number(e.target.value);
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Specific Heat Ratio Cp/Cv"
                                 />
                               )}
@@ -3194,7 +3303,7 @@ export default function App() {
                                           next[idx].Pc_bar_a = Number(toInternalPressure(val, processUnits.Pv).toFixed(3));
                                           setOperatingCases(next);
                                         }}
-                                        className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                        className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                         title={`Critical Pressure Pc (${processUnits.Pv})`}
                                       />
                                     </div>
@@ -3209,7 +3318,7 @@ export default function App() {
                                           next[idx].speedOfSound_m_s = Number(e.target.value);
                                           setOperatingCases(next);
                                         }}
-                                        className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                        className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                         title="Fluid Speed of Sound c_L (m/s) for Joukowsky Water-Hammer"
                                       />
                                     </div>
@@ -3230,28 +3339,19 @@ export default function App() {
                                 <select
                                   value={processUnits.viscosity}
                                   onChange={(e) => setProcessUnits({ ...processUnits, viscosity: e.target.value as ViscosityUnit })}
-                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none"
+                                  className="bg-[#edf1f5] border border-[#cfd8e3] text-[#0f8b8d] font-bold rounded px-1.5 py-0.5 text-[10px] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Change Viscosity display unit with auto-conversion"
                                 >
                                   <option value="cSt">cSt (mm²/s)</option>
                                   <option value="SSU">SSU</option>
                                   <option value="cP">cP</option>
                                 </select>
-                                <span className="relative group inline-flex items-center shrink-0">
-                                  <button
-                                    type="button"
-                                    aria-label="Viscosity/Z info"
-                                    className="p-0.5 rounded-full text-[#0f8b8d] hover:bg-[#0f8b8d]/15 focus:outline-none focus:ring-1 focus:ring-[#0f8b8d] transition"
-                                  >
-                                    <Info className="w-3.5 h-3.5" />
-                                  </button>
-                                  <span
-                                    role="tooltip"
-                                    className="hidden group-hover:block group-focus-within:block absolute right-0 bottom-full mb-1.5 z-50 w-64 p-2.5 rounded-lg bg-[#0f1419] text-slate-200 border border-[#2f3b47] shadow-2xl text-[11px] font-sans font-normal leading-snug whitespace-normal pointer-events-none"
-                                  >
-                                    For Liquid: kinematic viscosity ν (used for IEC 60534-2-1 Reynolds correction F_R). For Gas/Steam: compressibility factor Z. Two-Phase displays both ν and Z.
-                                  </span>
-                                </span>
+                                <InfoTooltip
+                                  label="Viscosity / Compressibility Z"
+                                  text="For Liquid: kinematic viscosity ν (used for IEC 60534-2-1 Reynolds correction F_R). For Gas/Steam: compressibility factor Z. Two-Phase displays both ν and Z."
+                                  placement="top"
+                                  align="right"
+                                />
                               </div>
                             </div>
                           </th>
@@ -3271,7 +3371,7 @@ export default function App() {
                                         next[idx].viscosity_cSt = Number(toInternalViscosity(val, processUnits.viscosity).toFixed(3));
                                         setOperatingCases(next);
                                       }}
-                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                       title={`Kinematic Viscosity (${processUnits.viscosity})`}
                                     />
                                   </div>
@@ -3286,7 +3386,7 @@ export default function App() {
                                         next[idx].compressibilityZ = Number(e.target.value);
                                         setOperatingCases(next);
                                       }}
-                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                      className="w-full bg-white border border-[#cfd8e3] rounded px-1.5 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                       title="Compressibility Factor Z"
                                     />
                                   </div>
@@ -3302,7 +3402,7 @@ export default function App() {
                                     next[idx].viscosity_cSt = Number(toInternalViscosity(val, processUnits.viscosity).toFixed(3));
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title={`Kinematic Viscosity (${processUnits.viscosity})`}
                                 />
                               ) : (
@@ -3315,7 +3415,7 @@ export default function App() {
                                     next[idx].compressibilityZ = Number(e.target.value);
                                     setOperatingCases(next);
                                   }}
-                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                  className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                   title="Compressibility Factor Z"
                                 />
                               )}
@@ -3349,7 +3449,7 @@ export default function App() {
                                       );
                                       setOperatingCases(next);
                                     }}
-                                    className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                                    className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                                     title="Gas/Vapor Mass Fraction fg (0.001–0.99)"
                                   />
                                 ) : (
@@ -3440,7 +3540,7 @@ export default function App() {
             </div>
 
             {/* CARD 3: AUTOMATED VALVE SIZE & PRESSURE CLASS SELECTION CARD */}
-            <div className="dy-card overflow-hidden">
+            <div className="dy-card overflow-hidden dy-defer-section">
               <div className="section-band px-5 py-3.5 flex flex-wrap items-center justify-between gap-3">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-lg bg-[#0b2545] border border-[#f2a900]/60 flex items-center justify-center text-[#8be0a8]">
@@ -4330,7 +4430,7 @@ export default function App() {
                           type: e.target.value as CharacteristicTypeId,
                         })
                       }
-                      className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       <option value="EQUAL_PCT">Equal-Percentage (Standard R^((h-1)))</option>
                       <option value="LINEAR">Linear (φ = h)</option>
@@ -4408,7 +4508,7 @@ export default function App() {
                             equalPctRangeability: Number(e.target.value),
                           })
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-3 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-3 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                   )}
@@ -4429,7 +4529,7 @@ export default function App() {
                               biLinearKneeTravelPct: Number(e.target.value),
                             })
                           }
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         />
                       </div>
                       <div>
@@ -4445,7 +4545,7 @@ export default function App() {
                               biLinearKneeCvPct: Number(e.target.value),
                             })
                           }
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         />
                       </div>
                     </div>
@@ -4600,7 +4700,8 @@ export default function App() {
 
                 <div className="p-4">
                   <div className="instrument-panel rounded-lg p-4">
-                    <svg viewBox="0 0 680 280" className="w-full h-64 overflow-visible">
+                    <svg viewBox="0 0 680 280" role="img" className="w-full h-64 overflow-visible">
+                      <title>Inherent vs. Installed Valve Flow Characteristic Curve</title>
                       {/* Grid lines */}
                       {[0, 20, 40, 60, 80, 100].map((tick) => {
                         const x = 50 + (tick / 100) * 590;
@@ -4751,7 +4852,8 @@ export default function App() {
 
                 <div className="p-4">
                   <div className="instrument-panel rounded-lg p-4">
-                    <svg viewBox="0 0 680 245" className="w-full h-56 overflow-visible">
+                    <svg viewBox="0 0 680 245" role="img" className="w-full h-56 overflow-visible">
+                      <title>Installed Control Loop Gain and EnTec Stability Band Chart</title>
                       {/* EnTec [0.5, 2.0] Stability Band Shaded Rectangle (Max Y = 3.0) */}
                       {(() => {
                         const yGain20 = 205 - (2.0 / 3.0) * 180;
@@ -5073,7 +5175,7 @@ export default function App() {
                               type: e.target.value as CharacteristicTypeId,
                             })
                           }
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         >
                           <option value="EQUAL_PCT">Equal-Percentage (R^((h-1)))</option>
                           <option value="LINEAR">Linear (φ = h)</option>
@@ -5094,7 +5196,7 @@ export default function App() {
                                 equalPctRangeability: Number(e.target.value),
                               })
                             }
-                            className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-bold focus:border-[#0f8b8d] focus:outline-none shrink-0"
+                            className="bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-xs font-mono text-[#0f8b8d] font-bold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] shrink-0"
                             title="Inherent Rangeability R"
                           >
                             <option value={30}>R=30</option>
@@ -5116,7 +5218,7 @@ export default function App() {
                       <select
                         value={cageMaterial}
                         onChange={(e) => handleCageMaterialChange(e.target.value as CageMaterialId)}
-                        className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       >
                         {Object.values(CAGE_MATERIALS).map((m) => (
                           <option key={m.id} value={m.id}>
@@ -5140,7 +5242,7 @@ export default function App() {
                         onChange={(e) =>
                           setManufacturingProcess(e.target.value as TrimManufacturingProcessId)
                         }
-                        className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none disabled:opacity-60"
+                        className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d] disabled:opacity-60"
                       >
                         {Object.values(TRIM_MANUFACTURING_PROCESSES).map((mp) => (
                           <option key={mp.id} value={mp.id}>
@@ -5236,7 +5338,7 @@ export default function App() {
                           max="30"
                           value={numRows}
                           onChange={(e) => setNumRows(Number(e.target.value))}
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         />
                       </div>
                       <div>
@@ -5250,7 +5352,7 @@ export default function App() {
                           max="16"
                           value={baseHoleDia_mm}
                           onChange={(e) => setBaseHoleDia_mm(Number(e.target.value))}
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         />
                       </div>
                       <div>
@@ -5263,7 +5365,7 @@ export default function App() {
                           min="2.5"
                           value={selectedWallThickness_mm}
                           onChange={(e) => setSelectedWallThickness_mm(Number(e.target.value))}
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         />
                       </div>
                       <div>
@@ -5276,7 +5378,7 @@ export default function App() {
                           min="0"
                           value={erosionAllowance_mm}
                           onChange={(e) => setErosionAllowance_mm(Number(e.target.value))}
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         />
                       </div>
                     </div>
@@ -5352,7 +5454,7 @@ export default function App() {
                         <select
                           value={holeSpacingRule}
                           onChange={(e) => setHoleSpacingRule(e.target.value as HoleSpacingRuleId)}
-                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[11px] font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                          className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[11px] font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                         >
                           {Object.values(HOLE_SPACING_RULES).map((rule) => (
                             <option key={rule.id} value={rule.id}>
@@ -5572,7 +5674,8 @@ export default function App() {
                       const plugY = padT + plotH - (plugZ_mm / maxZ) * plotH;
 
                       return (
-                        <svg viewBox={`0 0 ${svgW} ${svgH}`} className="w-full h-80">
+                        <svg viewBox={`0 0 ${svgW} ${svgH}`} role="img" className="w-full h-80">
+                          <title>2D Unrolled Drilled Cage Perforation Map and Gallery Heatmap</title>
                           {/* Direction-Aware 3D Gallery Separation / Impingement Heatmap Zones */}
                           {showSibandaGalleryHeatmap && methodologyMode === 'ADVANCED_LOCAL_3D' && (
                             <g>
@@ -5887,7 +5990,8 @@ export default function App() {
                         ...cageSynthesis.continuousProfile.map((p) => p.targetCv)
                       );
                       return (
-                        <svg viewBox="0 0 680 230" className="w-full h-52 overflow-visible">
+                        <svg viewBox="0 0 680 230" role="img" className="w-full h-52 overflow-visible">
+                          <title>Drilled Cage Target vs. Synthesized Discrete Cv Curve</title>
                           {[0, 20, 40, 60, 80, 100].map((tick) => {
                             const x = 50 + (tick / 100) * 590;
                             const y = 195 - (tick / 100) * 165;
@@ -6005,7 +6109,8 @@ export default function App() {
                       const topRowZ = correlatedValve.stroke_mm * 0.9;
                       const botRowZ = correlatedValve.stroke_mm * 0.12;
                       return (
-                        <svg viewBox="0 0 460 230" className="w-full h-52 overflow-visible">
+                        <svg viewBox="0 0 460 230" role="img" className="w-full h-52 overflow-visible">
+                          <title>Circumferential Gallery Flow Distribution Polar/Linear Profile</title>
                           {[0, 90, 135, 180, 225, 270, 360].map((deg) => {
                             const x = 42 + (deg / 360) * 395;
                             const isSep =
@@ -6140,7 +6245,8 @@ export default function App() {
                       const maxP = Math.max(1, ...planes.map((p) => p.localStaticPressure_bar)) * 1.05;
                       const maxV = Math.max(1, ...planes.map((p) => p.localVelocity_m_s)) * 1.1;
                       return (
-                        <svg viewBox="0 0 680 210" className="w-full h-48 overflow-visible">
+                        <svg viewBox="0 0 680 210" role="img" className="w-full h-48 overflow-visible">
+                          <title>Multi-Stage Axial Pressure and Velocity Profile</title>
                           {[0, 0.25, 0.5, 0.75, 1.0].map((frac) => {
                             const y = 175 - frac * 145;
                             return (
@@ -6400,7 +6506,7 @@ export default function App() {
                     <select
                       value={plugAlloy}
                       onChange={(e) => setPlugAlloy(e.target.value as ThermalAlloyId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       {Object.values(THERMAL_ALLOYS).map((a) => (
                         <option key={a.id} value={a.id}>
@@ -6415,7 +6521,7 @@ export default function App() {
                     <select
                       value={cageAlloy}
                       onChange={(e) => setCageAlloy(e.target.value as ThermalAlloyId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       {Object.values(THERMAL_ALLOYS).map((a) => (
                         <option key={a.id} value={a.id}>
@@ -6430,7 +6536,7 @@ export default function App() {
                     <select
                       value={bodyAlloy}
                       onChange={(e) => setBodyAlloy(e.target.value as ThermalAlloyId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       {Object.values(THERMAL_ALLOYS).map((a) => (
                         <option key={a.id} value={a.id}>
@@ -6447,7 +6553,7 @@ export default function App() {
                         type="number"
                         value={initialTemp_degC}
                         onChange={(e) => setInitialTemp_degC(Number(e.target.value))}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -6459,7 +6565,7 @@ export default function App() {
                           setSyncThermalTempWithProcess(false);
                           setFinalProcessTemp_degC(Number(e.target.value));
                         }}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -6469,7 +6575,7 @@ export default function App() {
                         min="0"
                         value={rampRate_degC_per_min}
                         onChange={(e) => setRampRate_degC_per_min(Number(e.target.value))}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                     <div>
@@ -6479,7 +6585,7 @@ export default function App() {
                         step="0.01"
                         value={coldRadialClearance_mm}
                         onChange={(e) => setColdRadialClearance_mm(Number(e.target.value))}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                   </div>
@@ -6594,7 +6700,8 @@ export default function App() {
                         (thermalResult.minSafeRadialClearanceFloor_mm / maxClearance) * (cBot - cTop);
 
                       return (
-                        <svg viewBox="0 0 680 330" className="w-full h-80 overflow-visible">
+                        <svg viewBox="0 0 680 330" role="img" className="w-full h-80 overflow-visible">
+                          <title>Transient Thermal Shock Temperature and Radial Clearance Curve</title>
                           {/* Temperature Subplot Legend */}
                           <g className="text-[10px] font-mono">
                             <line x1={55} y1={11} x2={75} y2={11} stroke="#ffd77a" strokeWidth="2" strokeDasharray="4 3" />
@@ -6803,7 +6910,7 @@ export default function App() {
                     <select
                       value={shutoffClass}
                       onChange={(e) => setShutoffClass(e.target.value as ShutoffClassId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       <option value="CLASS_II">Class II (0.5% Metal)</option>
                       <option value="CLASS_III">Class III (0.1% Metal)</option>
@@ -6817,7 +6924,7 @@ export default function App() {
                     <select
                       value={packingType}
                       onChange={(e) => setPackingType(e.target.value as PackingTypeId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       <option value="SINGLE_PTFE_V_RING">Single PTFE V-Ring</option>
                       <option value="DOUBLE_PTFE_LIVE_LOADED">Live-Loaded PTFE</option>
@@ -6833,7 +6940,7 @@ export default function App() {
                     <select
                       value={balanceSealType}
                       onChange={(e) => setBalanceSealType(e.target.value as BalanceSealTypeId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       <option value="PTFE_SPRING_ENERGIZED">Spring-Energized PTFE</option>
                       <option value="GRAPHITE_PISTON_RING">High-Temp Graphite Ring</option>
@@ -6845,7 +6952,7 @@ export default function App() {
                     <select
                       value={failAction}
                       onChange={(e) => setFailAction(e.target.value as FailActionId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       <option value="FAIL_CLOSED_ATO">Fail-Closed (Spring-to-Close)</option>
                       <option value="FAIL_OPEN_ATC">Fail-Open (Air-to-Close)</option>
@@ -6881,7 +6988,7 @@ export default function App() {
                     onChange={(e) =>
                       setCustomShutoffDeltaP_bar(e.target.value ? Number(e.target.value) : null)
                     }
-                    className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-bold focus:border-[#0f8b8d] focus:outline-none"
+                    className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-bold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                   />
                 </div>
 
@@ -6895,7 +7002,7 @@ export default function App() {
                       step="50"
                       value={actuatorArea_cm2}
                       onChange={(e) => setActuatorArea_cm2(Number(e.target.value))}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     />
                   </div>
                   <div>
@@ -6907,7 +7014,7 @@ export default function App() {
                       step="0.2"
                       value={airSupply_bar_g}
                       onChange={(e) => setAirSupply_bar_g(Number(e.target.value))}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     />
                   </div>
                   <div>
@@ -6919,7 +7026,7 @@ export default function App() {
                       step="0.1"
                       value={benchSetLower_bar_g}
                       onChange={(e) => setBenchSetLower_bar_g(Number(e.target.value))}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     />
                   </div>
                   <div>
@@ -6931,7 +7038,7 @@ export default function App() {
                       step="0.1"
                       value={benchSetUpper_bar_g}
                       onChange={(e) => setBenchSetUpper_bar_g(Number(e.target.value))}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     />
                   </div>
                 </div>
@@ -6942,7 +7049,7 @@ export default function App() {
                     <select
                       value={stemMaterial}
                       onChange={(e) => setStemMaterial(e.target.value as StemMaterialId)}
-                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none"
+                      className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                     >
                       {Object.values(STEM_MATERIALS).map((sm) => (
                         <option key={sm.id} value={sm.id}>
@@ -6959,7 +7066,7 @@ export default function App() {
                       <select
                         value={selectedStemDia_mm}
                         onChange={(e) => setSelectedStemDia_mm(Number(e.target.value))}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       >
                         {STANDARD_METRIC_STEM_DIAMETERS_MM.map((d) => (
                           <option key={d} value={d}>
@@ -6977,7 +7084,7 @@ export default function App() {
                         step="10"
                         value={unsupportedStemLength_mm}
                         onChange={(e) => setUnsupportedStemLength_mm(Number(e.target.value))}
-                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none"
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
                       />
                     </div>
                   </div>

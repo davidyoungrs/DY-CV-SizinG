@@ -5,6 +5,8 @@
 :root {
   color-scheme: light;
   accent-color: #0f8b8d;
+  --scrollbar-thumb: #94a3b8;
+  --scrollbar-track: #edf1f5;
 }
 
 @layer base {
@@ -12,6 +14,20 @@
     background-color: #edf1f5;
     color: #0b2545;
     font-feature-settings: "cv02", "cv03", "cv04", "cv11";
+    font-size-adjust: from-font;
+  }
+
+  h1, h2, h3, h4, h5, h6 {
+    text-wrap: balance;
+  }
+
+  p, li {
+    text-wrap: pretty;
+  }
+
+  :where(a, button, input, select, textarea, summary, [tabindex]):focus-visible {
+    outline: 2px solid #0f8b8d;
+    outline-offset: 2px;
   }
 
   input[type="range"] {
@@ -20,6 +36,23 @@
 }
 
 @layer components {
+  .visually-hidden:where(:not(:focus-within, :active)) {
+    position: absolute !important;
+    clip-path: inset(50%) !important;
+    overflow: hidden !important;
+    width: 1px !important;
+    height: 1px !important;
+    margin: -1px !important;
+    padding: 0 !important;
+    border: 0 !important;
+    white-space: nowrap !important;
+  }
+
+  .dy-defer-section {
+    content-visibility: auto;
+    contain-intrinsic-size: auto none auto 420px;
+  }
+
   .dy-card {
     background-color: #ffffff;
     border: 1px solid #cfd8e3;
@@ -39,38 +72,55 @@
     border: 1px solid #2f3b47;
     color: #e2e8f0;
     accent-color: #0f8b8d;
+    --scrollbar-thumb: #2f3b47;
+    --scrollbar-track: #0f1419;
   }
 
   .instrument-tile {
     background-color: #182028;
     border: 1px solid #2f3b47;
   }
+
+  [popover]:is(:popover-open, .\:popover-open) {
+    margin: 0;
+  }
 }
 
-/* Custom Industrial Scrollbars */
-::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
-}
-::-webkit-scrollbar-track {
-  background: #edf1f5;
-}
-::-webkit-scrollbar-thumb {
-  background: #94a3b8;
-  border-radius: 4px;
-}
-::-webkit-scrollbar-thumb:hover {
-  background: #0f8b8d;
+/* Custom Industrial Scrollbars (Standard + Legacy WebKit Fallback) */
+html,
+.instrument-panel,
+.overflow-x-auto,
+.overflow-y-auto,
+.overflow-auto {
+  scrollbar-color: var(--scrollbar-thumb) var(--scrollbar-track);
+  scrollbar-width: thin;
 }
 
-.instrument-panel ::-webkit-scrollbar-track {
-  background: #0f1419;
-}
-.instrument-panel ::-webkit-scrollbar-thumb {
-  background: #2f3b47;
-}
-.instrument-panel ::-webkit-scrollbar-thumb:hover {
-  background: #0f8b8d;
+@supports not (scrollbar-color: auto) {
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+    border-radius: 4px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: #0f8b8d;
+  }
+
+  .instrument-panel ::-webkit-scrollbar-track {
+    background: var(--scrollbar-track);
+  }
+  .instrument-panel ::-webkit-scrollbar-thumb {
+    background: var(--scrollbar-thumb);
+  }
+  .instrument-panel ::-webkit-scrollbar-thumb:hover {
+    background: #0f8b8d;
+  }
 }
 
 @media print {
