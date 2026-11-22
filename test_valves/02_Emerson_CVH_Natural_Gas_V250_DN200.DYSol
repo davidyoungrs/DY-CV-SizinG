@@ -1,0 +1,63 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-02",
+    "serviceDescription": "Emerson CVH Sample 1: Natural Gas Letdown (NPS 8 Fisher V250, Cv=2190 -> calc Cv=923)",
+    "lineNumber": "8\"-NG-REF02-CL300",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 200,
+    "pressureClass": "CL300_PN40",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "CONTOURED_EQP",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 2190.0,
+    "piping": {
+      "upstreamPipeID_mm": 202.7,
+      "downstreamPipeID_mm": 202.7,
+      "pipeWallThickness_mm": 8.18,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-design",
+        "label": "Ref Case (6.0 MMscfh)",
+        "enabled": true,
+        "fluidPhase": "GAS",
+        "flowRate": 160746.0,
+        "P1_bar_a": 14.8,
+        "P2_bar_a": 4.46,
+        "T1_degC": 15.56,
+        "rho_kg_m3": 11.5,
+        "Pv_bar_a": 0.0,
+        "Pc_bar_a": 46.0,
+        "viscosity_cSt": 1.5,
+        "speedOfSound_m_s": 430.0,
+        "molecularWeight": 17.38,
+        "gammaCpCv": 1.31,
+        "compressibilityZ": 1.0
+      }
+    ],
+    "charConfig": {
+      "type": "EQUAL_PERCENTAGE",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}

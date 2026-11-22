@@ -1,0 +1,63 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-05",
+    "serviceDescription": "ISA-75.01.01 Ex 2: Choked Water (DN100 Segmented Ball, calc Kv=238 / Cv=275.1)",
+    "lineNumber": "4\"-WTR-REF05-CL150",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 100,
+    "pressureClass": "CL150_PN16",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "CONTOURED_EQP",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 350.0,
+    "piping": {
+      "upstreamPipeID_mm": 100.0,
+      "downstreamPipeID_mm": 100.0,
+      "pipeWallThickness_mm": 6.02,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-design",
+        "label": "Ref Case (360 m3/h Choked)",
+        "enabled": true,
+        "fluidPhase": "LIQUID",
+        "flowRate": 360.0,
+        "P1_bar_a": 6.8,
+        "P2_bar_a": 2.2,
+        "T1_degC": 89.85,
+        "rho_kg_m3": 965.4,
+        "Pv_bar_a": 0.701,
+        "Pc_bar_a": 221.2,
+        "viscosity_cSt": 0.326,
+        "speedOfSound_m_s": 1555.0,
+        "molecularWeight": 18.015,
+        "gammaCpCv": 1.32,
+        "compressibilityZ": 1.0
+      }
+    ],
+    "charConfig": {
+      "type": "EQUAL_PERCENTAGE",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}

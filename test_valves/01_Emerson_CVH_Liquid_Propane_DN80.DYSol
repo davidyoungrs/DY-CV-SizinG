@@ -1,0 +1,63 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-01",
+    "serviceDescription": "Emerson CVH: Liquid Propane w/ Reducers (3in CL300 Globe, Cv=121 -> calc Cv=125.7)",
+    "lineNumber": "8\"-C3-REF01-CL300",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 80,
+    "pressureClass": "CL300_PN40",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "CONTOURED_EQP",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 121.0,
+    "piping": {
+      "upstreamPipeID_mm": 203.0,
+      "downstreamPipeID_mm": 203.0,
+      "pipeWallThickness_mm": 8.18,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-design",
+        "label": "Ref Case (800 gpm)",
+        "enabled": true,
+        "fluidPhase": "LIQUID",
+        "flowRate": 181.7,
+        "P1_bar_a": 21.7,
+        "P2_bar_a": 20.0,
+        "T1_degC": 21.0,
+        "rho_kg_m3": 500.0,
+        "Pv_bar_a": 8.6,
+        "Pc_bar_a": 42.5,
+        "viscosity_cSt": 0.2,
+        "speedOfSound_m_s": 900.0,
+        "molecularWeight": 44.1,
+        "gammaCpCv": 1.13,
+        "compressibilityZ": 1.0
+      }
+    ],
+    "charConfig": {
+      "type": "EQUAL_PERCENTAGE",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}

@@ -1,0 +1,81 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-08",
+    "serviceDescription": "ChemProCal ISA-75.01: Fuel Gas Letdown (Globe FTO, calc Cv=9.07 Normal / 14.10 Flare)",
+    "lineNumber": "2\"-FG-REF08-CL300",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 50,
+    "pressureClass": "CL300_PN40",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "WINDOW_CAGE",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 22.0,
+    "piping": {
+      "upstreamPipeID_mm": 52.5,
+      "downstreamPipeID_mm": 52.5,
+      "pipeWallThickness_mm": 3.91,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-norm",
+        "label": "Normal (12,500 Sm3/h)",
+        "enabled": true,
+        "fluidPhase": "GAS",
+        "flowRate": 11849.0,
+        "P1_bar_a": 25.0,
+        "P2_bar_a": 10.0,
+        "T1_degC": 35.0,
+        "rho_kg_m3": 19.3,
+        "Pv_bar_a": 0.0,
+        "Pc_bar_a": 46.0,
+        "viscosity_cSt": 0.9,
+        "speedOfSound_m_s": 415.0,
+        "molecularWeight": 18.2,
+        "gammaCpCv": 1.28,
+        "compressibilityZ": 0.92
+      },
+      {
+        "id": "case-upset",
+        "label": "Emergency Flare (Choked)",
+        "enabled": true,
+        "fluidPhase": "GAS",
+        "flowRate": 18480.0,
+        "P1_bar_a": 25.0,
+        "P2_bar_a": 2.0,
+        "T1_degC": 35.0,
+        "rho_kg_m3": 19.3,
+        "Pv_bar_a": 0.0,
+        "Pc_bar_a": 46.0,
+        "viscosity_cSt": 0.9,
+        "speedOfSound_m_s": 415.0,
+        "molecularWeight": 18.2,
+        "gammaCpCv": 1.28,
+        "compressibilityZ": 0.92
+      }
+    ],
+    "charConfig": {
+      "type": "EQUAL_PERCENTAGE",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}

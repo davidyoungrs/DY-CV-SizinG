@@ -1,0 +1,63 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-06",
+    "serviceDescription": "ISA-75.01.01 Ex 3: CO2 w/ Reducers (DN50 in 80/100mm pipe, calc Kv=72.2 / Cv=83.5)",
+    "lineNumber": "3\"-CO2-REF06-CL150",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 50,
+    "pressureClass": "CL150_PN16",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "CONTOURED_LINEAR",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 100.0,
+    "piping": {
+      "upstreamPipeID_mm": 80.0,
+      "downstreamPipeID_mm": 100.0,
+      "pipeWallThickness_mm": 5.49,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-design",
+        "label": "Ref Case (3800 Nm3/h CO2)",
+        "enabled": true,
+        "fluidPhase": "GAS",
+        "flowRate": 3800.0,
+        "P1_bar_a": 6.8,
+        "P2_bar_a": 3.1,
+        "T1_degC": 159.85,
+        "rho_kg_m3": 8.3,
+        "Pv_bar_a": 0.0,
+        "Pc_bar_a": 73.8,
+        "viscosity_cSt": 17.43,
+        "speedOfSound_m_s": 315.0,
+        "molecularWeight": 44.01,
+        "gammaCpCv": 1.3,
+        "compressibilityZ": 0.988
+      }
+    ],
+    "charConfig": {
+      "type": "LINEAR",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}

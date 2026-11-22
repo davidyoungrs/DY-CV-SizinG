@@ -1,0 +1,63 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-10",
+    "serviceDescription": "ISA S75.01 Guide: Cooling Water Control (200 gpm, rated Cv=35 -> calc Cv=28.2)",
+    "lineNumber": "1.5\"-CW-REF10-CL150",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 40,
+    "pressureClass": "CL150_PN16",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "CONTOURED_EQP",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 35.0,
+    "piping": {
+      "upstreamPipeID_mm": 40.9,
+      "downstreamPipeID_mm": 40.9,
+      "pipeWallThickness_mm": 3.68,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-design",
+        "label": "Ref Case (200 gpm)",
+        "enabled": true,
+        "fluidPhase": "LIQUID",
+        "flowRate": 45.42,
+        "P1_bar_a": 7.91,
+        "P2_bar_a": 4.46,
+        "T1_degC": 25.0,
+        "rho_kg_m3": 997.0,
+        "Pv_bar_a": 0.032,
+        "Pc_bar_a": 220.6,
+        "viscosity_cSt": 0.89,
+        "speedOfSound_m_s": 1497.0,
+        "molecularWeight": 18.015,
+        "gammaCpCv": 1.32,
+        "compressibilityZ": 1.0
+      }
+    ],
+    "charConfig": {
+      "type": "EQUAL_PERCENTAGE",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}

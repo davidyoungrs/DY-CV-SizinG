@@ -1,0 +1,81 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-09",
+    "serviceDescription": "Gute Valve Manual Sec 6.3: HP BFW (GV-MSC-6 6-Stage, Kv=800 / Cv=925 -> calc Kv=565/631)",
+    "lineNumber": "8\"-BFW-REF09-CL1500",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 200,
+    "pressureClass": "CL1500_PN250",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "CAGE_3STAGE",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 925.0,
+    "piping": {
+      "upstreamPipeID_mm": 202.7,
+      "downstreamPipeID_mm": 202.7,
+      "pipeWallThickness_mm": 18.26,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-norm",
+        "label": "Normal (180 m3/h)",
+        "enabled": true,
+        "fluidPhase": "LIQUID",
+        "flowRate": 180.0,
+        "P1_bar_a": 195.0,
+        "P2_bar_a": 120.0,
+        "T1_degC": 290.0,
+        "rho_kg_m3": 740.0,
+        "Pv_bar_a": 74.0,
+        "Pc_bar_a": 220.6,
+        "viscosity_cSt": 0.12,
+        "speedOfSound_m_s": 950.0,
+        "molecularWeight": 18.015,
+        "gammaCpCv": 1.32,
+        "compressibilityZ": 1.0
+      },
+      {
+        "id": "case-max",
+        "label": "Max (220 m3/h, 90 bar dP)",
+        "enabled": true,
+        "fluidPhase": "LIQUID",
+        "flowRate": 220.0,
+        "P1_bar_a": 195.0,
+        "P2_bar_a": 105.0,
+        "T1_degC": 290.0,
+        "rho_kg_m3": 740.0,
+        "Pv_bar_a": 74.0,
+        "Pc_bar_a": 220.6,
+        "viscosity_cSt": 0.12,
+        "speedOfSound_m_s": 950.0,
+        "molecularWeight": 18.015,
+        "gammaCpCv": 1.32,
+        "compressibilityZ": 1.0
+      }
+    ],
+    "charConfig": {
+      "type": "LINEAR",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}

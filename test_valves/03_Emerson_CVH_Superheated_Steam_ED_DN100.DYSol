@@ -1,0 +1,63 @@
+{
+  "format": "DY_SIZE_SOLVER_PROJECT",
+  "appVersion": "1.0.4",
+  "unitSystem": "METRIC",
+  "projectMeta": {
+    "tagNumber": "REF-03",
+    "serviceDescription": "Emerson CVH Sample 2: Superheated Steam w/ Reducers (NPS 4 Fisher ED, Cv=236 -> calc Cv=169)",
+    "lineNumber": "6\"-STM-REF03-CL300",
+    "projectRev": "Rev A"
+  },
+  "inputs": {
+    "selectedDN": 100,
+    "pressureClass": "CL300_PN40",
+    "bodyStyle": "GLOBE_STRAIGHT",
+    "trimStyle": "CONTOURED_LINEAR",
+    "flowDirection": "FTO",
+    "reducedTrimFactor": 1.0,
+    "useExtendedStroke": false,
+    "customRatedCvOverride": 236.0,
+    "piping": {
+      "upstreamPipeID_mm": 154.9,
+      "downstreamPipeID_mm": 154.9,
+      "pipeWallThickness_mm": 7.11,
+      "upstreamPipeLength_m": 50,
+      "actuatorCloseTime_s": 3.5,
+      "bodyMaterialCategory": "STAINLESS_ALLOY",
+      "desuperheaterEnabled": false,
+      "sprayWaterTemp_degC": 105,
+      "sprayWaterPressure_bar_a": 60,
+      "targetDownstreamTemp_degC": 240,
+      "downstreamDiffuserEnabled": false,
+      "diffuserCv": 450,
+      "diffuserXt": 0.65
+    },
+    "operatingCases": [
+      {
+        "id": "case-design",
+        "label": "Ref Case (125,000 lb/h)",
+        "enabled": true,
+        "fluidPhase": "STEAM",
+        "flowRate": 56700.0,
+        "P1_bar_a": 35.5,
+        "P2_bar_a": 18.3,
+        "T1_degC": 260.0,
+        "rho_kg_m3": 16.71,
+        "Pv_bar_a": 0.0,
+        "Pc_bar_a": 220.6,
+        "viscosity_cSt": 1.0,
+        "speedOfSound_m_s": 560.0,
+        "molecularWeight": 18.015,
+        "gammaCpCv": 1.33,
+        "compressibilityZ": 1.0
+      }
+    ],
+    "charConfig": {
+      "type": "LINEAR",
+      "equalPctRangeability": 50,
+      "biLinearKneeTravelPct": 35,
+      "biLinearKneeCvPct": 12,
+      "valveAuthorityPv": 0.35
+    }
+  }
+}
