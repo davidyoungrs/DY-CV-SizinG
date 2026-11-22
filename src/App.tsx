@@ -125,8 +125,8 @@ import {
 } from './engine/industryStandards';
 
 // Application revision displayed in the header title bar & browser tab.
-// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.9) unless minor/major escalation is requested.
-export const APP_VERSION = '1.0.8';
+// Increment by +0.0.1 on every subsequent code change/push (next: 1.0.10) unless minor/major escalation is requested.
+export const APP_VERSION = '1.0.9';
 
 /**
  * Top-layer, viewport-aware tooltip satisfying WCAG 1.4.13 (hoverable, persistent, Escape-dismissible).
@@ -1635,6 +1635,26 @@ export default function App() {
                   id="tools-dropdown-menu"
                   role="menu"
                   aria-label="Engineering Tools and Exports"
+                  onKeyDown={(e) => {
+                    const items = Array.from(
+                      e.currentTarget.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')
+                    );
+                    if (items.length === 0) return;
+                    const currentIdx = items.indexOf(document.activeElement as HTMLButtonElement);
+                    if (e.key === 'ArrowDown') {
+                      e.preventDefault();
+                      items[(currentIdx + 1) % items.length]?.focus();
+                    } else if (e.key === 'ArrowUp') {
+                      e.preventDefault();
+                      items[(currentIdx - 1 + items.length) % items.length]?.focus();
+                    } else if (e.key === 'Home') {
+                      e.preventDefault();
+                      items[0]?.focus();
+                    } else if (e.key === 'End') {
+                      e.preventDefault();
+                      items[items.length - 1]?.focus();
+                    }
+                  }}
                   className="absolute right-0 mt-2 w-64 rounded-xl bg-[#0f1419] border border-[#2f3b47] shadow-2xl py-2 z-50 text-xs font-mono divide-y divide-[#2f3b47]/60"
                 >
                   {/* File Save / Load group */}
@@ -2255,10 +2275,11 @@ export default function App() {
 
                 <div className="p-5 space-y-4">
                   <div>
-                    <label className="block text-xs font-mono text-[#13315c] font-semibold mb-1.5">
+                    <label htmlFor="fluid-preset-select" className="block text-xs font-mono text-[#13315c] font-semibold mb-1.5">
                       Quick-Load Process Fluid Preset (Applies to All Operating Cases)
                     </label>
                     <select
+                      id="fluid-preset-select"
                       onChange={(e) => applyFluidPresetToAllCases(e.target.value)}
                       defaultValue="BFW_185C"
                       className="w-full bg-white border border-[#cfd8e3] rounded-lg px-3 py-2 text-xs font-mono text-[#0f8b8d] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
@@ -2273,11 +2294,12 @@ export default function App() {
 
                   <div className="grid grid-cols-3 gap-3 pt-1">
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="custom-seat-bore" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Custom Seat Bore (mm)
                       </label>
                       <input
-                        type="number"
+                        id="custom-seat-bore"
+                        type="number" inputMode="decimal"
                         step="0.5"
                         placeholder={`${correlatedValve.d_port_mm}`}
                         value={customBoreOverride ?? ''}
@@ -2290,11 +2312,12 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="custom-stroke-h" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Custom Stroke H (mm)
                       </label>
                       <input
-                        type="number"
+                        id="custom-stroke-h"
+                        type="number" inputMode="decimal"
                         step="1"
                         placeholder={`${correlatedValve.stroke_mm}`}
                         value={customStrokeOverride ?? ''}
@@ -2307,11 +2330,12 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="custom-rated-cv" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Custom Rated Cv
                       </label>
                       <input
-                        type="number"
+                        id="custom-rated-cv"
+                        type="number" inputMode="decimal"
                         step="1"
                         placeholder={`${correlatedValve.ratedCv}`}
                         value={customRatedCvOverride ?? ''}
@@ -2354,10 +2378,11 @@ export default function App() {
                 <div className="p-5 space-y-3">
                   <div className="grid grid-cols-1 sm:grid-cols-12 gap-3">
                     <div className="sm:col-span-7">
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="pipe-schedule-select" className="block text-[11px] font-mono text-slate-600 mb-1">
                         ASME B36.10M Pipe Schedule (Sets D1, D2 &amp; t_p)
                       </label>
                       <select
+                        id="pipe-schedule-select"
                         value={pipeScheduleId}
                         onChange={(e) => handlePipeScheduleChange(e.target.value)}
                         className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] font-semibold focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
@@ -2371,10 +2396,11 @@ export default function App() {
                       </select>
                     </div>
                     <div className="sm:col-span-5">
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="body-alloy-group" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Body Alloy Group (Syncs Tab 4 Body)
                       </label>
                       <select
+                        id="body-alloy-group"
                         value={piping.bodyMaterialCategory}
                         onChange={(e) =>
                           handleBodyMaterialCategoryChange(
@@ -2391,11 +2417,12 @@ export default function App() {
 
                   <div className="grid grid-cols-2 sm:grid-cols-5 gap-3">
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="pipe-upstream-id" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Upstream ID D1 (mm)
                       </label>
                       <input
-                        type="number"
+                        id="pipe-upstream-id"
+                        type="number" inputMode="decimal"
                         step="0.1"
                         value={piping.upstreamPipeID_mm}
                         onChange={(e) => {
@@ -2406,11 +2433,12 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="pipe-downstream-id" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Downstream D2 (mm)
                       </label>
                       <input
-                        type="number"
+                        id="pipe-downstream-id"
+                        type="number" inputMode="decimal"
                         step="0.1"
                         value={piping.downstreamPipeID_mm}
                         onChange={(e) => {
@@ -2421,11 +2449,12 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="pipe-wall-tp" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Pipe Wall t_p (mm)
                       </label>
                       <input
-                        type="number"
+                        id="pipe-wall-tp"
+                        type="number" inputMode="decimal"
                         step="0.1"
                         value={piping.pipeWallThickness_mm}
                         onChange={(e) => {
@@ -2436,11 +2465,12 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="pipe-line-length" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Line Length L (m)
                       </label>
                       <input
-                        type="number"
+                        id="pipe-line-length"
+                        type="number" inputMode="decimal"
                         step="5"
                         value={piping.upstreamPipeLength_m}
                         onChange={(e) =>
@@ -2450,11 +2480,12 @@ export default function App() {
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                      <label htmlFor="actuator-close-time" className="block text-[11px] font-mono text-slate-600 mb-1">
                         Fast-Close Time (s)
                       </label>
                       <input
-                        type="number"
+                        id="actuator-close-time"
+                        type="number" inputMode="decimal"
                         step="0.5"
                         value={piping.actuatorCloseTime_s}
                         onChange={(e) =>
@@ -2469,10 +2500,11 @@ export default function App() {
                 {/* Industry Standards Strip: ASME B16.34 P-T, ISA-75.08.01 Face-to-Face, NACE MR0175, Fire-Safe */}
                 <div className="pt-4 border-t border-[#e2e8f0] grid grid-cols-1 lg:grid-cols-12 gap-4 items-end">
                   <div className="lg:col-span-3">
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                    <label htmlFor="body-material-asme" className="block text-[11px] font-mono text-slate-600 mb-1">
                       Body Material (ASME B16.34 Group)
                     </label>
                     <select
+                      id="body-material-asme"
                       value={bodyMaterial}
                       onChange={(e) => setBodyMaterial(e.target.value as BodyMaterialGroupId)}
                       className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
@@ -2485,10 +2517,11 @@ export default function App() {
                     </select>
                   </div>
                   <div className="lg:col-span-2">
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                    <label htmlFor="end-connection-isa" className="block text-[11px] font-mono text-slate-600 mb-1">
                       End Connection (ISA-75.08)
                     </label>
                     <select
+                      id="end-connection-isa"
                       value={endConnection}
                       onChange={(e) => setEndConnection(e.target.value as EndConnectionId)}
                       className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
@@ -2499,12 +2532,14 @@ export default function App() {
                     </select>
                   </div>
                   <div className="lg:col-span-2">
-                    <label className="block text-[11px] font-mono text-slate-600 mb-1">
+                    <label htmlFor="h2s-partial-pressure" className="block text-[11px] font-mono text-slate-600 mb-1">
                       H₂S Partial P (bar) / Cl⁻ (ppm)
                     </label>
                     <div className="flex gap-1.5">
                       <input
-                        type="number"
+                        id="h2s-partial-pressure"
+                        aria-label="H2S partial pressure in bar"
+                        type="number" inputMode="decimal"
                         step="0.01"
                         min="0"
                         value={h2sPartialPressure_bar}
@@ -2513,7 +2548,9 @@ export default function App() {
                         title="H2S partial pressure (bar)"
                       />
                       <input
-                        type="number"
+                        id="chloride-ppm"
+                        aria-label="Chloride concentration in ppm"
+                        type="number" inputMode="decimal"
                         step="50"
                         min="0"
                         value={chloride_ppm}
@@ -2586,7 +2623,7 @@ export default function App() {
                               Spray Temp (°C)
                             </label>
                             <input
-                              type="number"
+                              type="number" inputMode="decimal"
                               step="5"
                               value={piping.sprayWaterTemp_degC ?? 105}
                               onChange={(e) =>
@@ -2600,7 +2637,7 @@ export default function App() {
                               Spray Press (bar a)
                             </label>
                             <input
-                              type="number"
+                              type="number" inputMode="decimal"
                               step="1"
                               value={piping.sprayWaterPressure_bar_a ?? 60}
                               onChange={(e) =>
@@ -2617,7 +2654,7 @@ export default function App() {
                               Target Out (°C)
                             </label>
                             <input
-                              type="number"
+                              type="number" inputMode="decimal"
                               step="5"
                               value={piping.targetDownstreamTemp_degC ?? 240}
                               onChange={(e) =>
@@ -2652,7 +2689,7 @@ export default function App() {
                               Diffuser Rated Cv
                             </label>
                             <input
-                              type="number"
+                              type="number" inputMode="decimal"
                               step="10"
                               min="1"
                               value={piping.diffuserCv ?? 450}
@@ -2667,7 +2704,7 @@ export default function App() {
                               Diffuser Choked xT
                             </label>
                             <input
-                              type="number"
+                              type="number" inputMode="decimal"
                               step="0.05"
                               min="0.15"
                               max="0.9"
@@ -2932,7 +2969,7 @@ export default function App() {
                             return (
                               <td key={c.id} className="py-2 px-2.5">
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="any"
                                   value={displayFlow}
                                   onChange={(e) => {
@@ -2978,7 +3015,7 @@ export default function App() {
                             return (
                               <td key={c.id} className="py-2 px-2.5">
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="any"
                                   value={displayP1}
                                   onChange={(e) => {
@@ -3028,7 +3065,7 @@ export default function App() {
                             return (
                               <td key={c.id} className="py-2 px-2.5">
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="any"
                                   value={displayP2}
                                   onChange={(e) => {
@@ -3078,7 +3115,7 @@ export default function App() {
                             return (
                               <td key={c.id} className="py-2 px-2.5">
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="any"
                                   value={displayT1}
                                   onChange={(e) => {
@@ -3125,7 +3162,7 @@ export default function App() {
                                   <div>
                                     <span className="block text-[9px] text-slate-500">ρ_L</span>
                                     <input
-                                      type="number"
+                                      type="number" inputMode="decimal"
                                       step="any"
                                       value={Number(fromInternalDensity(c.rho_kg_m3, processUnits.density).toFixed(2))}
                                       onChange={(e) => {
@@ -3141,7 +3178,7 @@ export default function App() {
                                   <div>
                                     <span className="block text-[9px] text-slate-500">MW_g</span>
                                     <input
-                                      type="number"
+                                      type="number" inputMode="decimal"
                                       step="0.1"
                                       value={c.molecularWeight}
                                       onChange={(e) => {
@@ -3156,7 +3193,7 @@ export default function App() {
                                 </div>
                               ) : c.fluidPhase === 'LIQUID' ? (
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="any"
                                   value={Number(fromInternalDensity(c.rho_kg_m3, processUnits.density).toFixed(2))}
                                   onChange={(e) => {
@@ -3170,7 +3207,7 @@ export default function App() {
                                 />
                               ) : (
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="0.1"
                                   value={c.molecularWeight}
                                   onChange={(e) => {
@@ -3217,7 +3254,7 @@ export default function App() {
                                   <div>
                                     <span className="block text-[9px] text-slate-500">Pv</span>
                                     <input
-                                      type="number"
+                                      type="number" inputMode="decimal"
                                       step="any"
                                       value={Number(fromInternalPressure(c.Pv_bar_a, processUnits.Pv).toFixed(3))}
                                       onChange={(e) => {
@@ -3233,7 +3270,7 @@ export default function App() {
                                   <div>
                                     <span className="block text-[9px] text-slate-500">γ</span>
                                     <input
-                                      type="number"
+                                      type="number" inputMode="decimal"
                                       step="0.02"
                                       value={c.gammaCpCv}
                                       onChange={(e) => {
@@ -3248,7 +3285,7 @@ export default function App() {
                                 </div>
                               ) : c.fluidPhase === 'LIQUID' ? (
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="any"
                                   value={Number(fromInternalPressure(c.Pv_bar_a, processUnits.Pv).toFixed(3))}
                                   onChange={(e) => {
@@ -3262,7 +3299,7 @@ export default function App() {
                                 />
                               ) : (
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="0.02"
                                   value={c.gammaCpCv}
                                   onChange={(e) => {
@@ -3294,7 +3331,7 @@ export default function App() {
                                     <div>
                                       <span className="block text-[9px] text-slate-500">Pc</span>
                                       <input
-                                        type="number"
+                                        type="number" inputMode="decimal"
                                         step="any"
                                         value={Number(fromInternalPressure(c.Pc_bar_a, processUnits.Pv).toFixed(2))}
                                         onChange={(e) => {
@@ -3310,7 +3347,7 @@ export default function App() {
                                     <div>
                                       <span className="block text-[9px] text-slate-500">c_L</span>
                                       <input
-                                        type="number"
+                                        type="number" inputMode="decimal"
                                         step="10"
                                         value={c.speedOfSound_m_s}
                                         onChange={(e) => {
@@ -3362,7 +3399,7 @@ export default function App() {
                                   <div>
                                     <span className="block text-[9px] text-slate-500">ν</span>
                                     <input
-                                      type="number"
+                                      type="number" inputMode="decimal"
                                       step="any"
                                       value={Number(fromInternalViscosity(c.viscosity_cSt, processUnits.viscosity).toFixed(2))}
                                       onChange={(e) => {
@@ -3378,7 +3415,7 @@ export default function App() {
                                   <div>
                                     <span className="block text-[9px] text-slate-500">Z</span>
                                     <input
-                                      type="number"
+                                      type="number" inputMode="decimal"
                                       step="0.02"
                                       value={c.compressibilityZ}
                                       onChange={(e) => {
@@ -3393,7 +3430,7 @@ export default function App() {
                                 </div>
                               ) : c.fluidPhase === 'LIQUID' ? (
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="any"
                                   value={Number(fromInternalViscosity(c.viscosity_cSt, processUnits.viscosity).toFixed(2))}
                                   onChange={(e) => {
@@ -3407,7 +3444,7 @@ export default function App() {
                                 />
                               ) : (
                                 <input
-                                  type="number"
+                                  type="number" inputMode="decimal"
                                   step="0.02"
                                   value={c.compressibilityZ}
                                   onChange={(e) => {
@@ -3436,7 +3473,7 @@ export default function App() {
                               <td key={c.id} className="py-2 px-2.5">
                                 {c.fluidPhase === 'TWO_PHASE' ? (
                                   <input
-                                    type="number"
+                                    type="number" inputMode="decimal"
                                     min="0.001"
                                     max="0.99"
                                     step="0.01"
@@ -4499,7 +4536,7 @@ export default function App() {
                         Inherent Rangeability R (30:1 / 50:1 / 100:1)
                       </label>
                       <input
-                        type="number"
+                        type="number" inputMode="decimal"
                         step="5"
                         value={charConfig.equalPctRangeability}
                         onChange={(e) =>
@@ -4521,7 +4558,7 @@ export default function App() {
                           Knee Travel %
                         </label>
                         <input
-                          type="number"
+                          type="number" inputMode="decimal"
                           value={charConfig.biLinearKneeTravelPct}
                           onChange={(e) =>
                             setCharConfig({
@@ -4537,7 +4574,7 @@ export default function App() {
                           Knee Cv %
                         </label>
                         <input
-                          type="number"
+                          type="number" inputMode="decimal"
                           value={charConfig.biLinearKneeCvPct}
                           onChange={(e) =>
                             setCharConfig({
@@ -4578,7 +4615,7 @@ export default function App() {
                           <div key={i} className="flex items-center gap-2 text-xs font-mono">
                             <span className="text-slate-500 w-6">#{i + 1}</span>
                             <input
-                              type="number"
+                              type="number" inputMode="decimal"
                               value={pt.travelPct}
                               onChange={(e) => {
                                 const next = [...charConfig.customPoints];
@@ -4589,7 +4626,7 @@ export default function App() {
                             />
                             <span className="text-slate-500">% →</span>
                             <input
-                              type="number"
+                              type="number" inputMode="decimal"
                               value={pt.cvPct}
                               onChange={(e) => {
                                 const next = [...charConfig.customPoints];
@@ -5333,7 +5370,7 @@ export default function App() {
                           Axial Hole Rows N_rows
                         </label>
                         <input
-                          type="number"
+                          type="number" inputMode="decimal"
                           min="4"
                           max="30"
                           value={numRows}
@@ -5346,7 +5383,7 @@ export default function App() {
                           Base Orifice Ød_h (mm)
                         </label>
                         <input
-                          type="number"
+                          type="number" inputMode="decimal"
                           step="0.2"
                           min="1.5"
                           max="16"
@@ -5360,7 +5397,7 @@ export default function App() {
                           Cage Wall t_cage (mm)
                         </label>
                         <input
-                          type="number"
+                          type="number" inputMode="decimal"
                           step="0.5"
                           min="2.5"
                           value={selectedWallThickness_mm}
@@ -5373,7 +5410,7 @@ export default function App() {
                           Erosion Allowance (mm)
                         </label>
                         <input
-                          type="number"
+                          type="number" inputMode="decimal"
                           step="0.25"
                           min="0"
                           value={erosionAllowance_mm}
@@ -6550,7 +6587,7 @@ export default function App() {
                     <div>
                       <label className="block text-slate-600 mb-1">Initial Temp T0 (°C)</label>
                       <input
-                        type="number"
+                        type="number" inputMode="decimal"
                         value={initialTemp_degC}
                         onChange={(e) => setInitialTemp_degC(Number(e.target.value))}
                         className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
@@ -6559,7 +6596,7 @@ export default function App() {
                     <div>
                       <label className="block text-slate-600 mb-1">Final Process T_∞ (°C)</label>
                       <input
-                        type="number"
+                        type="number" inputMode="decimal"
                         value={effectiveThermalTargetTemp_degC}
                         onChange={(e) => {
                           setSyncThermalTempWithProcess(false);
@@ -6571,7 +6608,7 @@ export default function App() {
                     <div>
                       <label className="block text-slate-600 mb-1">Warmup Ramp (°C/min)</label>
                       <input
-                        type="number"
+                        type="number" inputMode="decimal"
                         min="0"
                         value={rampRate_degC_per_min}
                         onChange={(e) => setRampRate_degC_per_min(Number(e.target.value))}
@@ -6581,7 +6618,7 @@ export default function App() {
                     <div>
                       <label className="block text-slate-600 mb-1">Cold Radial Gap (mm)</label>
                       <input
-                        type="number"
+                        type="number" inputMode="decimal"
                         step="0.01"
                         value={coldRadialClearance_mm}
                         onChange={(e) => setColdRadialClearance_mm(Number(e.target.value))}
@@ -6981,7 +7018,7 @@ export default function App() {
                     )}
                   </div>
                   <input
-                    type="number"
+                    type="number" inputMode="decimal"
                     step="0.5"
                     min="0.5"
                     value={effectiveShutoffDeltaP_bar}
@@ -6998,7 +7035,7 @@ export default function App() {
                       Diaphragm Area A_eff (cm²)
                     </label>
                     <input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="50"
                       value={actuatorArea_cm2}
                       onChange={(e) => setActuatorArea_cm2(Number(e.target.value))}
@@ -7010,7 +7047,7 @@ export default function App() {
                       Supply Air P_supply (bar g)
                     </label>
                     <input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.2"
                       value={airSupply_bar_g}
                       onChange={(e) => setAirSupply_bar_g(Number(e.target.value))}
@@ -7022,7 +7059,7 @@ export default function App() {
                       Bench Set Lower (bar g)
                     </label>
                     <input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.1"
                       value={benchSetLower_bar_g}
                       onChange={(e) => setBenchSetLower_bar_g(Number(e.target.value))}
@@ -7034,7 +7071,7 @@ export default function App() {
                       Bench Set Upper (bar g)
                     </label>
                     <input
-                      type="number"
+                      type="number" inputMode="decimal"
                       step="0.1"
                       value={benchSetUpper_bar_g}
                       onChange={(e) => setBenchSetUpper_bar_g(Number(e.target.value))}
@@ -7080,7 +7117,7 @@ export default function App() {
                         Unsupported Stem L (mm)
                       </label>
                       <input
-                        type="number"
+                        type="number" inputMode="decimal"
                         step="10"
                         value={unsupportedStemLength_mm}
                         onChange={(e) => setUnsupportedStemLength_mm(Number(e.target.value))}
