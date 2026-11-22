@@ -538,7 +538,7 @@ function solveDiffuserIntermediatePressure(params: {
     const choked = x >= x_choked;
     const x_eff = Math.min(x, x_choked);
     const Y = Math.max(0.667, 1.0 - x_eff / (3.0 * x_choked));
-    const flow_kg_h = 27.3 * diffuserCv * Y * Math.sqrt(Math.max(1e-6, x_eff * P_int * st.rho_kg_m3));
+    const flow_kg_h = 31.56 * diffuserCv * Y * Math.sqrt(Math.max(1e-6, x_eff * P_int * st.rho_kg_m3));
     return { flow_kg_h, choked };
   };
 
@@ -670,7 +670,7 @@ export function evaluateOperatingCase(params: {
   const K1_plus_KB1 = Math.max(0, K1 + KB1);
 
   // IEC 60534 numerical constants (with d in mm and Cv):
-  // N1 = 0.865 (Cv, m3/h, bar), N2 = 0.00214 (Cv, mm), N5 = 0.00241 (Cv, mm), N6 = 27.3 (Cv, kg/h, bar), N9 = 2120 (Cv, Nm3/h, bar)
+  // N1 = 0.865 (Cv, m3/h, bar), N2 = 0.00214 (Cv, mm), N5 = 0.00241 (Cv, mm), N6 = 31.56 (Cv, kg/h, bar), N9 = 2844 (Cv, Nm3/h, bar)
   const N2_mm = 0.00214;
   const N5_mm = 0.00241;
 
@@ -744,14 +744,14 @@ export function evaluateOperatingCase(params: {
       const x_eff = Math.min(x, x_choked);
       const x_for_Y = Math.min(multistageFactorFM * x, x_choked);
       const Y = Math.max(0.667, 1.0 - x_for_Y / (3.0 * x_choked));
-      // IEC 60534-2-1 N9 = 2120 (Cv, Nm3/h at 0°C, bar)
+      // IEC 60534-2-1 N9 = 2844 (Cv, Nm3/h at 0°C, bar)
       const denom =
-        2120 *
+        2844 *
         FP *
         P1 *
         Y *
         Math.sqrt(x_eff / Math.max(1, point.molecularWeight * T1_K * point.compressibilityZ));
-      estCv = point.flowRate / Math.max(1e-4, denom);
+      estCv = point.flowRate / Math.max(1e-6, denom);
     } else if (point.fluidPhase === 'STEAM') {
       const Fgamma = Math.max(0.5, steamProps.gamma_steam / 1.40);
       const x = deltaP / P1;
@@ -759,10 +759,10 @@ export function evaluateOperatingCase(params: {
       const x_eff = Math.min(x, x_choked);
       const x_for_Y = Math.min(multistageFactorFM * x, x_choked);
       const Y = Math.max(0.667, 1.0 - x_for_Y / (3.0 * x_choked));
-      // IEC 60534-2-1 N6 = 27.3 (Cv, kg/h, bar, kg/m3) with IAPWS-anchored real steam density
+      // IEC 60534-2-1 N6 = 31.56 (Cv, kg/h, bar, kg/m3) with IAPWS-anchored real steam density
       estCv =
         point.flowRate /
-        (27.3 * FP * Y * Math.sqrt(Math.max(1e-4, x_eff * P1 * steamProps.rho_steam)));
+        (31.56 * FP * Y * Math.sqrt(Math.max(1e-4, x_eff * P1 * steamProps.rho_steam)));
     } else {
       // TWO_PHASE: Parcol Bulletin 1-I §4.3 & Warren Controls Two-Phase Sizing
       const fg = Math.min(0.99, Math.max(0.005, point.massFractionGas_fg ?? 0.12));
@@ -801,12 +801,12 @@ export function evaluateOperatingCase(params: {
           (865 * FP * Math.sqrt(Math.max(1e-4, dP_eff_liq * rho_r)));
         const cvGas =
           (point.flowRate * fg) /
-          (27.3 * FP * Y * Math.sqrt(Math.max(1e-4, x_eff * P1 * rho_g1)));
+          (31.56 * FP * Y * Math.sqrt(Math.max(1e-4, x_eff * P1 * rho_g1)));
         estCv = cvLiq + cvGas;
       } else {
         twoPhaseModelUsed = 'Parcol §4.3 Homogeneous (Ve Effective Vol.)';
         const Ve = (fg * V_g1) / (Y * Y) + fliq * V_liq1;
-        estCv = point.flowRate / (27.3 * FP * Math.sqrt(Math.max(1e-6, (x_eff * P1) / Ve)));
+        estCv = point.flowRate / (31.56 * FP * Math.sqrt(Math.max(1e-6, (x_eff * P1) / Ve)));
       }
     }
   }
@@ -984,7 +984,32 @@ export function evaluateOperatingCase(params: {
     const x_eff = Math.min(x, x_choked);
     deltaP_choked = x_choked * P1;
     deltaP_effective = x_eff * P1;
-    requiredCv = estCv;
+
+    // IEC 60534-2-1 non-turbulent Reynolds correction (FR) for compressible micro-flow / high-viscosity gas
+    const Q_actual_m3_h =
+      point.fluidPhase === 'GAS'
+        ? point.flowRate * (1.01325 / P1) * (T1_K / 273.15) * point.compressibilityZ
+        : point.flowRate / Math.max(0.05, steamProps.rho_steam);
+    const nu_cSt = Math.max(0.05, point.viscosity_cSt);
+    const cvTurb = Math.max(1e-5, estCv);
+    const termFourthGas =
+      1 +
+      Math.pow(
+        (FL_atTravel * FL_atTravel * cvTurb * cvTurb) / (N2_mm * Math.pow(d_mm, 4)),
+        2
+      );
+    Rev =
+      ((76000 * Fd * Q_actual_m3_h) / (nu_cSt * Math.sqrt(FL_atTravel * cvTurb))) *
+      Math.pow(termFourthGas, 0.25);
+
+    if (Rev < 10000) {
+      const logRe = Math.log10(Math.max(1, Rev));
+      FR = Math.min(1.0, Math.max(0.18, 0.026 * Math.pow(logRe, 3.85)));
+    } else {
+      FR = 1.0;
+    }
+
+    requiredCv = estCv / FR;
     regime = isChoked ? 'COMPRESSIBLE_CHOKED' : 'COMPRESSIBLE_SUBSONIC';
     regimeLabel = isChoked
       ? `Choked / Sonic Vena Contracta${stages >= 2 ? ` (FM=${multistageFactorFM})` : ''}`
@@ -1395,8 +1420,8 @@ export function evaluateOperatingCase(params: {
     FL_required: Number(FL_required.toFixed(3)),
     Rev: Math.round(Rev),
     FR: Number(FR.toFixed(3)),
-    requiredCv: Number(requiredCv.toFixed(2)),
-    requiredKv: Number(requiredKv.toFixed(2)),
+    requiredCv: Number(requiredCv.toFixed(requiredCv < 1 ? 4 : 2)),
+    requiredKv: Number(requiredKv.toFixed(requiredKv < 1 ? 4 : 2)),
     percentOfRatedCv: Number(percentOfRatedCv.toFixed(1)),
     estimatedTravelPct: Number(estimatedTravelPct.toFixed(1)),
     steamSuperheat_degC: steamProps.superheat_degC,
@@ -1550,7 +1575,7 @@ export function evaluateBackpressureOrificeSharing(params: {
     const Y_orf = Math.max(0.667, 1 - x_orf / 1.8);
     orificeRatedCv =
       maxCase.flowRate /
-      (2120 *
+      (2844 *
         PmidAtMax *
         Y_orf *
         Math.sqrt(x_orf / Math.max(1, maxCase.molecularWeight * T_K * maxCase.compressibilityZ)));
@@ -1562,7 +1587,7 @@ export function evaluateBackpressureOrificeSharing(params: {
     const x_orf = Math.min(0.42, dPOrfAtMax / Math.max(0.2, PmidAtMax));
     const Y_orf = Math.max(0.667, 1 - x_orf / 1.8);
     orificeRatedCv =
-      maxCase.flowRate / (27.3 * Y_orf * Math.sqrt(Math.max(1e-4, x_orf * PmidAtMax * rhoMid)));
+      maxCase.flowRate / (31.56 * Y_orf * Math.sqrt(Math.max(1e-4, x_orf * PmidAtMax * rhoMid)));
   }
 
   // Single-plate sharp-edge orifice equivalent bore: Cv ≈ 0.036 * d_mm^2

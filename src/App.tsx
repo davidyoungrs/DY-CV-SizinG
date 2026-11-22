@@ -126,7 +126,7 @@ import {
 
 // Application revision displayed in the header title bar & browser tab.
 // Increment by +0.0.1 on every subsequent code change/push (next: 1.0.10) unless minor/major escalation is requested.
-export const APP_VERSION = '1.0.9';
+export const APP_VERSION = '1.0.10';
 
 /**
  * Top-layer, viewport-aware tooltip satisfying WCAG 1.4.13 (hoverable, persistent, Escape-dismissible).
@@ -349,6 +349,8 @@ export default function App() {
   const [customBoreOverride, setCustomBoreOverride] = useState<number | null>(null);
   const [customStrokeOverride, setCustomStrokeOverride] = useState<number | null>(null);
   const [customRatedCvOverride, setCustomRatedCvOverride] = useState<number | null>(null);
+  const [customFLOverride, setCustomFLOverride] = useState<number | null>(null);
+  const [customXTOverride, setCustomXTOverride] = useState<number | null>(null);
   const [enableBackpressureOrifice, setEnableBackpressureOrifice] = useState<boolean>(false);
   const [orificeDeltaPSharePct, setOrificeDeltaPSharePct] = useState<number>(45);
 
@@ -558,6 +560,8 @@ export default function App() {
         customBoreOverride_mm: customBoreOverride,
         customStrokeOverride_mm: customStrokeOverride,
         customRatedCvOverride: customRatedCvOverride,
+        customFLOverride: customFLOverride,
+        customXTOverride: customXTOverride,
       }),
     [
       selectedDN,
@@ -570,6 +574,8 @@ export default function App() {
       customBoreOverride,
       customStrokeOverride,
       customRatedCvOverride,
+      customFLOverride,
+      customXTOverride,
     ]
   );
 
@@ -1350,6 +1356,8 @@ export default function App() {
         customBoreOverride,
         customStrokeOverride,
         customRatedCvOverride,
+        customFLOverride,
+        customXTOverride,
         enableBackpressureOrifice,
         orificeDeltaPSharePct,
         pipeScheduleId,
@@ -1458,6 +1466,8 @@ export default function App() {
         if (inp.customBoreOverride !== undefined) setCustomBoreOverride(inp.customBoreOverride);
         if (inp.customStrokeOverride !== undefined) setCustomStrokeOverride(inp.customStrokeOverride);
         if (inp.customRatedCvOverride !== undefined) setCustomRatedCvOverride(inp.customRatedCvOverride);
+        if (inp.customFLOverride !== undefined) setCustomFLOverride(inp.customFLOverride);
+        if (inp.customXTOverride !== undefined) setCustomXTOverride(inp.customXTOverride);
         if (inp.enableBackpressureOrifice !== undefined) setEnableBackpressureOrifice(inp.enableBackpressureOrifice);
         if (inp.orificeDeltaPSharePct !== undefined) setOrificeDeltaPSharePct(inp.orificeDeltaPSharePct);
         if (inp.piping) setPiping(inp.piping);
@@ -2341,6 +2351,46 @@ export default function App() {
                         value={customRatedCvOverride ?? ''}
                         onChange={(e) =>
                           setCustomRatedCvOverride(
+                            e.target.value ? Number(e.target.value) : null
+                          )
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="custom-fl-override" className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Custom FL
+                      </label>
+                      <input
+                        id="custom-fl-override"
+                        type="number" inputMode="decimal"
+                        step="0.01"
+                        min="0.2"
+                        max="0.99"
+                        placeholder={`${correlatedValve.FL}`}
+                        value={customFLOverride ?? ''}
+                        onChange={(e) =>
+                          setCustomFLOverride(
+                            e.target.value ? Number(e.target.value) : null
+                          )
+                        }
+                        className="w-full bg-white border border-[#cfd8e3] rounded px-2.5 py-1.5 text-xs font-mono text-[#0b2545] focus:border-[#0f8b8d] focus:outline-none focus-visible:ring-2 focus-visible:ring-[#0f8b8d]"
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="custom-xt-override" className="block text-[11px] font-mono text-slate-600 mb-1">
+                        Custom xT
+                      </label>
+                      <input
+                        id="custom-xt-override"
+                        type="number" inputMode="decimal"
+                        step="0.01"
+                        min="0.05"
+                        max="0.99"
+                        placeholder={`${correlatedValve.xT}`}
+                        value={customXTOverride ?? ''}
+                        onChange={(e) =>
+                          setCustomXTOverride(
                             e.target.value ? Number(e.target.value) : null
                           )
                         }

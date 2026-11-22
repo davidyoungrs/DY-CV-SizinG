@@ -17,6 +17,8 @@
     "reducedTrimFactor": 1.0,
     "useExtendedStroke": false,
     "customRatedCvOverride": 350.0,
+    "customFLOverride": 0.60,
+    "customXTOverride": 0.35,
     "piping": {
       "upstreamPipeID_mm": 100.0,
       "downstreamPipeID_mm": 100.0,

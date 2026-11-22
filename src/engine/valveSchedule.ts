@@ -793,6 +793,8 @@ export function computeCorrelatedValveParameters(params: {
   customBoreOverride_mm?: number | null;
   customStrokeOverride_mm?: number | null;
   customRatedCvOverride?: number | null;
+  customFLOverride?: number | null;
+  customXTOverride?: number | null;
 }): CorrelatedValveParameters {
   const sizeSpec =
     GENERIC_VALVE_SCHEDULE.find((s) => s.dn === params.dn) || GENERIC_VALVE_SCHEDULE[4]; // Default DN50
@@ -864,9 +866,19 @@ export function computeCorrelatedValveParameters(params: {
 
   const effectiveCd = Number((ratedCv / (sizeSpec.d_in * sizeSpec.d_in)).toFixed(2));
 
-  const FL = params.flowDirection === 'FTO' ? trimSpec.FL_FTO : trimSpec.FL_FTC;
+  const FL =
+    params.customFLOverride && params.customFLOverride > 0
+      ? Math.min(0.99, Math.max(0.2, params.customFLOverride))
+      : params.flowDirection === 'FTO'
+      ? trimSpec.FL_FTO
+      : trimSpec.FL_FTC;
   const Kc = params.flowDirection === 'FTO' ? trimSpec.Kc_FTO : trimSpec.Kc_FTC;
-  const xT = params.flowDirection === 'FTO' ? trimSpec.xT_FTO : trimSpec.xT_FTC;
+  const xT =
+    params.customXTOverride && params.customXTOverride > 0
+      ? Math.min(0.99, Math.max(0.05, params.customXTOverride))
+      : params.flowDirection === 'FTO'
+      ? trimSpec.xT_FTO
+      : trimSpec.xT_FTC;
 
   const bodyMinWall_mm = sizeSpec.bodyMinWall_mm[params.pressureClass];
   const stemDiaRecommended_mm =
